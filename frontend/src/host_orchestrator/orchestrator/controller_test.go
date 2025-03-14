@@ -24,9 +24,9 @@ import (
 	"testing"
 	"time"
 
-	apiv1 "github.com/google/android-cuttlefish/frontend/src/host_orchestrator/api/v1"
 	"github.com/google/android-cuttlefish/frontend/src/host_orchestrator/orchestrator/debug"
 	orchtesting "github.com/google/android-cuttlefish/frontend/src/host_orchestrator/orchestrator/testing"
+	apiv1 "github.com/google/android-cuttlefish/frontend/src/liboperator/api/v1"
 
 	"github.com/gorilla/mux"
 )
@@ -289,6 +289,21 @@ func TestGetStatuszIsHandled(t *testing.T) {
 	makeRequest(rr, req, &controller)
 
 	if rr.Code != http.StatusOK {
+		t.Errorf("request was not handled. This failure implies an API breaking change.")
+	}
+}
+
+func TestPullRuntimeArtifactsIsHandled(t *testing.T) {
+	rr := httptest.NewRecorder()
+	req, err := http.NewRequest("POST", "/runtimeartifacts/:pull", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	controller := Controller{}
+
+	makeRequest(rr, req, &controller)
+
+	if rr.Code == http.StatusNotFound && rr.Body.String() == pageNotFoundErrMsg {
 		t.Errorf("request was not handled. This failure implies an API breaking change.")
 	}
 }

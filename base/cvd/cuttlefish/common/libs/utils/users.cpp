@@ -21,7 +21,9 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#include <algorithm>
 #include <cerrno>
+#include <cstdlib>
 #include <cstring>
 #include <mutex>
 #include <ostream>
@@ -32,7 +34,6 @@
 #include <android-base/logging.h>
 
 #include "common/libs/utils/contains.h"
-#include "common/libs/utils/result.h"
 
 namespace cuttlefish {
 namespace {
@@ -116,12 +117,6 @@ Result<std::string> SystemWideUserHome() {
     return CF_ERRNO("Failed to convert " << home_dir << " to its Realpath");
   }
   return home_realpath;
-}
-
-Result<std::string> CurrentUserName() {
-  char buf[LOGIN_NAME_MAX + 1];
-  CF_EXPECT(getlogin_r(buf, sizeof(buf)) == 0, strerror(errno));
-  return std::string(buf);
 }
 
 } // namespace cuttlefish

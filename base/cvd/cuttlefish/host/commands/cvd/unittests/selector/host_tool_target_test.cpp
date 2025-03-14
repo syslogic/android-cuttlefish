@@ -19,7 +19,8 @@
 
 #include "common/libs/utils/environment.h"
 #include "common/libs/utils/result_matchers.h"
-#include "host/commands/cvd/cli/commands/host_tool_target.h"
+#include "host/commands/cvd/server_command/host_tool_target.h"
+#include "host/commands/cvd/server_command/host_tool_target_manager.h"
 
 namespace cuttlefish {
 
@@ -29,12 +30,41 @@ TEST(HostToolTarget, KnownFlags) {
     GTEST_SKIP() << "Set ANDROID_HOST_OUT";
   }
 
-  HostToolTarget host_tool_target(android_host_out);
-  auto start_bin_name = host_tool_target.GetStartBinName();
-  ASSERT_THAT(start_bin_name, IsOk());
-  auto daemon_flag = host_tool_target.GetFlagInfo(*start_bin_name, "daemon");
+  auto host_tool_target = HostToolTarget::Create(android_host_out);
+  EXPECT_THAT(host_tool_target, IsOk());
 
-  auto bad_flag = host_tool_target.GetFlagInfo("start", "@never_exist@");
+  auto daemon_flag =
+      host_tool_target->GetFlagInfo(HostToolTarget::FlagInfoRequest{
+          .operation_ = "start",
+          .flag_name_ = "daemon",
+      });
+
+  auto bad_flag = host_tool_target->GetFlagInfo(HostToolTarget::FlagInfoRequest{
+      .operation_ = "start",
+      .flag_name_ = "@never_exist@",
+  });
+
+  EXPECT_THAT(daemon_flag, IsOk());
+  ASSERT_EQ(daemon_flag->Name(), "daemon");
+  ASSERT_TRUE(daemon_flag->Type() == "string" || daemon_flag->Type() == "bool");
+  EXPECT_THAT(bad_flag, IsError());
+}
+
+TEST(HostToolManager, KnownFlags) {
+  std::string android_host_out = StringFromEnv("ANDROID_HOST_OUT", "");
+  if (android_host_out.empty()) {
+    GTEST_SKIP() << "Set ANDROID_HOST_OUT";
+  }
+  auto host_tool_manager = NewHostToolTargetManager();
+
+  auto daemon_flag =
+      host_tool_manager->ReadFlag({.artifacts_path = android_host_out,
+                                   .op = "start",
+                                   .flag_name = "daemon"});
+  auto bad_flag =
+      host_tool_manager->ReadFlag({.artifacts_path = android_host_out,
+                                   .op = "start",
+                                   .flag_name = "@never_exist@"});
 
   EXPECT_THAT(daemon_flag, IsOk());
   ASSERT_EQ(daemon_flag->Name(), "daemon");
@@ -47,13 +77,18 @@ TEST(HostToolManager, KnownBins) {
   if (android_host_out.empty()) {
     GTEST_SKIP() << "Set ANDROID_HOST_OUT";
   }
-  HostToolTarget host_tool_target(android_host_out);
+  auto host_tool_manager = NewHostToolTargetManager();
 
-  auto start_bin = host_tool_target.GetStartBinName();
-  auto stop_bin = host_tool_target.GetStopBinName();
+  auto start_bin = host_tool_manager->ExecBaseName(
+      {.artifacts_path = android_host_out, .op = "start"});
+  auto stop_bin = host_tool_manager->ExecBaseName(
+      {.artifacts_path = android_host_out, .op = "stop"});
+  auto bad_bin = host_tool_manager->ExecBaseName(
+      {.artifacts_path = android_host_out, .op = "bad"});
 
   EXPECT_THAT(start_bin, IsOk());
   EXPECT_THAT(stop_bin, IsOk());
+  EXPECT_THAT(bad_bin, IsError());
   ASSERT_TRUE(*start_bin == "cvd_internal_start" || *start_bin == "launch_cvd")
       << "start_bin was " << *start_bin;
   ASSERT_TRUE(*stop_bin == "cvd_internal_stop" || *stop_bin == "stop_cvd")

@@ -16,7 +16,6 @@
 #pragma once
 
 #include <chrono>
-#include <cstddef>
 #include <optional>
 #include <string>
 #include <vector>
@@ -24,10 +23,8 @@
 #include <android-base/logging.h>
 
 #include "common/libs/utils/result.h"
-#include "host/commands/cvd/cache/cache.h"
 #include "host/libs/web/android_build_api.h"
 #include "host/libs/web/android_build_string.h"
-#include "host/libs/web/cas/cas_downloader.h"
 #include "host/libs/web/chrome_os_build_string.h"
 
 namespace cuttlefish {
@@ -37,7 +34,6 @@ inline constexpr char kDefaultCredentialFilepath[] = "";
 inline constexpr char kDefaultServiceAccountFilepath[] = "";
 inline constexpr char kDefaultApiKey[] = "";
 inline constexpr char kDefaultCredentialSource[] = "";
-inline constexpr char kDefaultProjectID[] = "";
 inline constexpr std::chrono::seconds kDefaultWaitRetryPeriod =
     std::chrono::seconds(20);
 inline constexpr bool kDefaultExternalDnsResolver =
@@ -66,13 +62,10 @@ struct BuildApiFlags {
   std::string api_key = kDefaultApiKey;
   CredentialFlags credential_flags;
   std::string credential_source = kDefaultCredentialSource;
-  std::string project_id = kDefaultProjectID;
   std::chrono::seconds wait_retry_period = kDefaultWaitRetryPeriod;
   bool external_dns_resolver = kDefaultExternalDnsResolver;
   std::string api_base_url = kAndroidBuildServiceUrl;
   bool enable_caching = kDefaultEnableCaching;
-  std::size_t max_cache_size_gb = kDefaultCacheSizeGb;
-  CasDownloaderFlags cas_downloader_flags;
 };
 
 struct VectorFlags {
@@ -99,8 +92,8 @@ struct FetchFlags {
   BuildApiFlags build_api_flags;
   VectorFlags vector_flags;
   int number_of_builds = 0;
-
-  static Result<FetchFlags> Parse(std::vector<std::string>& args);
 };
+
+Result<FetchFlags> GetFlagValues(int argc, char** argv);
 
 }  // namespace cuttlefish

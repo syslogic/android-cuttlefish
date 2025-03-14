@@ -152,15 +152,12 @@ class SharedFD {
   static bool Pipe(SharedFD* fd0, SharedFD* fd1);
 #ifdef __linux__
   static SharedFD Event(int initval = 0, int flags = 0);
-#ifdef CUTTLEFISH_HOST
-  static SharedFD ShmOpen(const std::string& name, int oflag, int mode);
-#endif
 #endif
   static SharedFD MemfdCreate(const std::string& name, unsigned int flags = 0);
   static SharedFD MemfdCreateWithData(const std::string& name, const std::string& data, unsigned int flags = 0);
   static SharedFD Mkstemp(std::string* path);
   static Result<std::pair<SharedFD, std::string>> Mkostemp(
-      std::string_view path, int flags = O_CLOEXEC);
+      const std::string_view path, const int flags = O_CLOEXEC);
   static int Poll(PollSharedFd* fds, size_t num_fds, int timeout);
   static int Poll(std::vector<PollSharedFd>& fds, int timeout);
   static bool SocketPair(int domain, int type, int protocol, SharedFD* fd0,
@@ -203,9 +200,6 @@ class SharedFD {
       int type, std::optional<int> vhost_user_vsock_listening_cid);
   static SharedFD VsockClient(unsigned int cid, unsigned int port, int type,
                               bool vhost_user);
-  static std::string GetVhostUserVsockServerAddr(
-      unsigned int port, int vhost_user_vsock_listening_cid);
-  static std::string GetVhostUserVsockClientAddr(int cid);
 #endif
 
   bool operator==(const SharedFD& rhs) const { return value_ == rhs.value_; }
@@ -255,7 +249,7 @@ class WeakFD {
 class ScopedMMap {
  public:
   ScopedMMap();
-  ScopedMMap(void* ptr, size_t len);
+  ScopedMMap(void* ptr, size_t size);
   ScopedMMap(const ScopedMMap& other) = delete;
   ScopedMMap& operator=(const ScopedMMap& other) = delete;
   ScopedMMap(ScopedMMap&& other);

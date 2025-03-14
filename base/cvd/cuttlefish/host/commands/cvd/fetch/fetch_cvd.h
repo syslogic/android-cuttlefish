@@ -15,17 +15,13 @@
 
 #pragma once
 
-#include <string>
-
 #include "common/libs/utils/result.h"
-#include "host/commands/cvd/fetch/fetch_cvd_parser.h"
+#include "host/libs/image_aggregator/sparse_image_utils.h"
 
 namespace cuttlefish {
 
 inline constexpr char kHostToolsSubdirectory[] = "host_tools";
 
-std::string GetFetchLogsFileName(const std::string& target_directory);
-
-Result<void> FetchCvdMain(const FetchFlags& flags);
+Result<void> FetchCvdMain(int argc, char** argv);
 
 }  // namespace cuttlefish

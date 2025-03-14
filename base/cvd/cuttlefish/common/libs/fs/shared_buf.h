@@ -16,7 +16,6 @@
 #pragma once
 
 #include <string>
-#include <string_view>
 #include <thread>
 #include <vector>
 
@@ -107,7 +106,7 @@ ssize_t ReadExactBinary(SharedFD fd, T* binary_data) {
  * -1 is returned. If not detected, 0 is returned with errno unchanged.
  *
  */
-ssize_t WriteAll(SharedFD fd, std::string_view buf);
+ssize_t WriteAll(SharedFD fd, const std::string& buf);
 
 /**
  * Writes to fd until writing all bytes in buf.
@@ -168,7 +167,7 @@ ssize_t WriteAllBinary(SharedFD fd, const T* binary_data) {
  * If a Send error is encountered, returns false. Some data may have already
  * been written to 'sock' at that point.
  */
-bool SendAll(SharedFD sock, std::string_view msg);
+bool SendAll(SharedFD sock, const std::string& msg);
 
 /**
  * Receives 'count' bytes from sock, checking for socket error conditions
@@ -177,6 +176,6 @@ bool SendAll(SharedFD sock, std::string_view msg);
  *
  * If a Recv error is encountered, returns the empty string
  */
-std::string RecvAll(SharedFD sock, size_t count);
+std::string RecvAll(SharedFD sock, const size_t count);
 
 } // namespace cuttlefish

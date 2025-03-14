@@ -18,7 +18,6 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"net/http"
 	"net/http/httputil"
 	"net/url"
 	"sync"
@@ -41,6 +40,10 @@ type Device struct {
 	clientCount int
 }
 
+type Group struct {
+	deviceIds []string
+}
+
 const DEFAULT_GROUP_ID = "default"
 
 func newDevice(id string, conn *JSONUnix, port int, privateData interface{}) *Device {
@@ -51,19 +54,15 @@ func newDevice(id string, conn *JSONUnix, port int, privateData interface{}) *De
 		return nil
 	}
 	proxy := httputil.NewSingleHostReverseProxy(url)
-	proxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
-		log.Printf("request %q failed: proxy error: %v", r.Method+" "+r.URL.Path, err)
-		w.Header().Add("x-cutf-proxy", "op-device")
-		w.WriteHeader(http.StatusBadGateway)
-	}
+
 	groupId := groupIdFromPrivateData(privateData)
 	return &Device{
 		conn:        conn,
 		Proxy:       proxy,
 		privateData: privateData,
 		Descriptor: apiv1.DeviceDescriptor{
-			DeviceId:  id,
-			GroupName: groupId,
+			DeviceId: id,
+			GroupId:  groupId,
 		},
 		clients:     make(map[int]Client),
 		clientCount: 0,
@@ -220,7 +219,7 @@ func (p *DevicePool) GetDevice(id string) *Device {
 func (p *DevicePool) GroupIds() []string {
 	set := make(map[string]bool)
 	for _, d := range p.GetDeviceDescList() {
-		set[d.GroupName] = true
+		set[d.GroupId] = true
 	}
 	ret := make([]string, 0, len(set))
 	for k := range set {
@@ -254,7 +253,7 @@ func (p *DevicePool) GetDeviceDescByGroupId(groupId string) []*apiv1.DeviceDescr
 	ret := make([]*apiv1.DeviceDescriptor, 0)
 	devs := p.GetDeviceDescList()
 	for _, d := range devs {
-		if d.GroupName == groupId {
+		if d.GroupId == groupId {
 			ret = append(ret, d)
 		}
 	}

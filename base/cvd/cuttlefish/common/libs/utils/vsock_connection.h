@@ -39,7 +39,6 @@ class VsockConnection {
                                  std::optional<int> vhost_user_vsock_cid);
   void SetDisconnectCallback(std::function<void()> callback);
 
-  bool IsConnected_Unguarded();
   bool IsConnected();
   bool DataAvailable();
   int32_t Read();

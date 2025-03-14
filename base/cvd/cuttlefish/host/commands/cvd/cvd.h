@@ -16,22 +16,23 @@
 
 #pragma once
 
-#include <string>
-#include <unordered_map>
-#include <vector>
+#include <android-base/logging.h>
 
 #include "common/libs/utils/result.h"
-#include "cuttlefish/host/commands/cvd/legacy/cvd_server.pb.h"
-#include "host/commands/cvd/instances/instance_manager.h"
-#include "host/commands/cvd/instances/lock/instance_lock.h"
+#include "cuttlefish/host/commands/cvd/cvd_server.pb.h"
+#include "host/commands/cvd/instance_lock.h"
+#include "host/commands/cvd/instance_manager.h"
 
 namespace cuttlefish {
 
 class Cvd {
  public:
-  Cvd(InstanceManager&, InstanceLockFileManager&);
+  Cvd(const android::base::LogSeverity verbosity,
+      InstanceLockFileManager& instance_lockfile_manager,
+      InstanceManager& instance_manager,
+      HostToolTargetManager& host_tool_target_manager);
 
-  Result<void> HandleCommand(
+  Result<cvd::Response> HandleCommand(
       const std::vector<std::string>& cvd_process_args,
       const std::unordered_map<std::string, std::string>& env,
       const std::vector<std::string>& selector_args);
@@ -45,8 +46,10 @@ class Cvd {
     const std::unordered_map<std::string, std::string>& env);
 
  private:
+  android::base::LogSeverity verbosity_;
+  InstanceLockFileManager& instance_lockfile_manager_;
   InstanceManager& instance_manager_;
-  InstanceLockFileManager& lock_file_manager_;
+  HostToolTargetManager& host_tool_target_manager_;
 };
 
 }  // namespace cuttlefish

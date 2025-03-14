@@ -5,7 +5,6 @@ import {BUILD_VERSION} from '../environments/version'
 
 @Injectable()
 @Component({
-  standalone: false,
   selector: 'app-root',
   templateUrl: './app.component.html',
   styleUrls: ['./app.component.scss'],

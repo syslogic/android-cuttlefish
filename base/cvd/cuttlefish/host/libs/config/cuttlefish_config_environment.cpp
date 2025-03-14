@@ -58,7 +58,7 @@ std::string CuttlefishConfig::EnvironmentSpecific::PerEnvironmentPath(
 
 std::string CuttlefishConfig::EnvironmentSpecific::PerEnvironmentLogPath(
     const std::string& file_name) const {
-  if (file_name.empty()) {
+  if (file_name.size() == 0) {
     // Don't append a / if file_name is empty.
     return PerEnvironmentPath(kLogDirName);
   }
@@ -68,7 +68,7 @@ std::string CuttlefishConfig::EnvironmentSpecific::PerEnvironmentLogPath(
 
 std::string CuttlefishConfig::EnvironmentSpecific::PerEnvironmentGrpcSocketPath(
     const std::string& file_name) const {
-  if (file_name.empty()) {
+  if (file_name.size() == 0) {
     // Don't append a / if file_name is empty.
     return PerEnvironmentPath(kGrpcSocketDirName);
   }
@@ -82,16 +82,6 @@ std::string CuttlefishConfig::EnvironmentSpecific::control_socket_path() const {
 
 std::string CuttlefishConfig::EnvironmentSpecific::launcher_log_path() const {
   return AbsolutePath(PerEnvironmentLogPath("launcher.log"));
-}
-
-std::string CuttlefishConfig::EnvironmentSpecific::casimir_nci_socket_path()
-    const {
-  return PerEnvironmentUdsPath("casimir_nci.sock");
-}
-
-std::string CuttlefishConfig::EnvironmentSpecific::casimir_rf_socket_path()
-    const {
-  return PerEnvironmentUdsPath("casimir_rf.sock");
 }
 
 static constexpr char kEnableWifi[] = "enable_wifi";
@@ -134,8 +124,8 @@ std::string CuttlefishConfig::EnvironmentSpecific::wmediumd_api_server_socket()
 
 static constexpr char kWmediumdConfig[] = "wmediumd_config";
 void CuttlefishConfig::MutableEnvironmentSpecific::set_wmediumd_config(
-    const std::string& config_path) {
-  (*Dictionary())[kWmediumdConfig] = config_path;
+    const std::string& config) {
+  (*Dictionary())[kWmediumdConfig] = config;
 }
 std::string CuttlefishConfig::EnvironmentSpecific::wmediumd_config() const {
   return (*Dictionary())[kWmediumdConfig].asString();
@@ -148,15 +138,6 @@ void CuttlefishConfig::MutableEnvironmentSpecific::set_wmediumd_mac_prefix(
 }
 int CuttlefishConfig::EnvironmentSpecific::wmediumd_mac_prefix() const {
   return (*Dictionary())[kWmediumdMacPrefix].asInt();
-}
-
-static constexpr char kGroupUuid[] = "group_uuid";
-void CuttlefishConfig::MutableEnvironmentSpecific::set_group_uuid(
-    int group_uuid) {
-  (*Dictionary())[kGroupUuid] = group_uuid;
-}
-int CuttlefishConfig::EnvironmentSpecific::group_uuid() const {
-  return (*Dictionary())[kGroupUuid].asInt();
 }
 
 }  // namespace cuttlefish

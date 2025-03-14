@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/bash
 
 set -e -x
 
@@ -51,13 +51,13 @@ function collect_logs_and_cleanup() {
     done
   fi
 
-  # Be nice, don't leave devices behind.
+  # Be nice, don't leave a server or devices behind.
   cvd reset -y
 }
 
 trap collect_logs_and_cleanup EXIT
 
-# Make sure to run in a clean environment, without any devices running
+# Make sure there is no cvd server around
 cvd reset -y
 
 credential_arg=""

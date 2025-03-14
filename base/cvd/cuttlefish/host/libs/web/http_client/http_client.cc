@@ -21,6 +21,7 @@
 #include <memory>
 #include <mutex>
 #include <ostream>
+#include <regex>
 #include <sstream>
 #include <string>
 #include <thread>
@@ -51,7 +52,7 @@ int LoggingCurlDebugFunction(CURL*, curl_infotype type, char* data, size_t size,
   switch (type) {
     case CURLINFO_TEXT:
       LOG(VERBOSE) << "CURLINFO_TEXT ";
-      LOG(DEBUG) << ScrubSecrets(TrimWhitespace(data, size));
+      LOG(INFO) << ScrubSecrets(TrimWhitespace(data, size));
       break;
     case CURLINFO_HEADER_IN:
       LOG(VERBOSE) << "CURLINFO_HEADER_IN ";
@@ -70,8 +71,6 @@ int LoggingCurlDebugFunction(CURL*, curl_infotype type, char* data, size_t size,
     case CURLINFO_SSL_DATA_OUT:
       break;
     case CURLINFO_END:
-      LOG(VERBOSE) << "CURLINFO_END ";
-      LOG(DEBUG) << ScrubSecrets(TrimWhitespace(data, size));
       break;
     default:
       LOG(ERROR) << "Unexpected cURL output type: " << type;
@@ -165,47 +164,31 @@ class CurlClient : public HttpClient {
 
   Result<HttpResponse<void>> DownloadToCallback(
       DataCallback callback, const std::string& url,
-      const std::vector<std::string>& headers) override {
+      const std::vector<std::string>& headers) {
     return DownloadToCallback(HttpMethod::kGet, callback, url, headers);
   }
 
   Result<HttpResponse<std::string>> DownloadToFile(
       const std::string& url, const std::string& path,
-      const std::vector<std::string>& headers) override {
-    LOG(DEBUG) << "Saving '" << url << "' to '" << path << "'";
+      const std::vector<std::string>& headers) {
+    LOG(INFO) << "Attempting to save \"" << url << "\" to \"" << path << "\"";
 
     auto [shared_fd, temp_path] = CF_EXPECT(SharedFD::Mkostemp(path));
     SharedFDOstream stream(shared_fd);
-    uint64_t total_dl = 0;
-    uint64_t last_log = 0;
-    auto callback = [&stream, &total_dl, &last_log](char* data,
-                                                    size_t size) -> bool {
-      total_dl += size;
-      if (total_dl / 2 >= last_log) {
-        LOG(DEBUG) << "Downloaded " << total_dl << " bytes";
-        last_log = total_dl;
-      }
+    auto callback = [&stream](char* data, size_t size) -> bool {
       if (data == nullptr) {
         return !stream.fail();
       }
       stream.write(data, size);
       return !stream.fail();
     };
-    HttpResponse<void> http_response = CF_EXPECT(DownloadToCallback(callback, url, headers));
-
-    LOG(DEBUG) << "Downloaded '" << total_dl << "' total bytes from '" << url
-               << "' to '" << path << "'.";
-
-    if (http_response.HttpSuccess()) {
-      CF_EXPECT(RenameFile(temp_path, path));
-    } else {
-      CF_EXPECTF(RemoveFile(temp_path), "Unable to remove temporary file \"{}\"\nMay require manual removal", temp_path);
-    }
+    auto http_response = CF_EXPECT(DownloadToCallback(callback, url, headers));
+    CF_EXPECT(RenameFile(temp_path, path));
     return HttpResponse<std::string>{path, http_response.http_code};
   }
 
   Result<HttpResponse<Json::Value>> DownloadToJson(
-      const std::string& url, const std::vector<std::string>& headers) override {
+      const std::string& url, const std::vector<std::string>& headers) {
     return DownloadToJson(HttpMethod::kGet, url, headers);
   }
 
@@ -227,7 +210,7 @@ class CurlClient : public HttpClient {
     if (!resolver_) {
       return ManagedCurlSlist(nullptr, curl_slist_free_all);
     }
-    LOG(DEBUG) << "Manually resolving \"" << url_str << "\"";
+    LOG(INFO) << "Manually resolving \"" << url_str << "\"";
     std::stringstream resolve_line;
     std::unique_ptr<CURLU, decltype(&curl_url_cleanup)> url(curl_url(),
                                                             curl_url_cleanup);
@@ -285,7 +268,7 @@ class CurlClient : public HttpClient {
     std::lock_guard<std::mutex> lock(mutex_);
     auto extra_cache_entries = CF_EXPECT(ManuallyResolveUrl(url));
     curl_easy_setopt(curl_, CURLOPT_RESOLVE, extra_cache_entries.get());
-    LOG(DEBUG) << "Downloading '" << url << "'";
+    LOG(INFO) << "Attempting to download \"" << url << "\"";
     CF_EXPECT(data_to_write.empty() || method == HttpMethod::kPost,
               "data must be empty for non POST requests");
     CF_EXPECT(curl_ != nullptr, "curl was not initialized");
@@ -339,7 +322,7 @@ class ServerErrorRetryClient : public HttpClient {
         retry_delay_(retry_delay) {}
 
   Result<HttpResponse<std::string>> GetToString(
-      const std::string& url, const std::vector<std::string>& headers) override {
+      const std::string& url, const std::vector<std::string>& headers) {
     auto fn = [&, this]() { return inner_client_.GetToString(url, headers); };
     return CF_EXPECT(RetryImpl<std::string>(fn));
   }
@@ -354,7 +337,7 @@ class ServerErrorRetryClient : public HttpClient {
   }
 
   Result<HttpResponse<std::string>> DeleteToString(
-      const std::string& url, const std::vector<std::string>& headers) override {
+      const std::string& url, const std::vector<std::string>& headers) {
     auto fn = [&, this]() {
       return inner_client_.DeleteToString(url, headers);
     };
@@ -381,7 +364,7 @@ class ServerErrorRetryClient : public HttpClient {
 
   Result<HttpResponse<std::string>> DownloadToFile(
       const std::string& url, const std::string& path,
-      const std::vector<std::string>& headers) override {
+      const std::vector<std::string>& headers) {
     auto fn = [&, this]() {
       return inner_client_.DownloadToFile(url, path, headers);
     };
@@ -389,7 +372,7 @@ class ServerErrorRetryClient : public HttpClient {
   }
 
   Result<HttpResponse<Json::Value>> DownloadToJson(
-      const std::string& url, const std::vector<std::string>& headers) override {
+      const std::string& url, const std::vector<std::string>& headers) {
     auto fn = [&, this]() {
       return inner_client_.DownloadToJson(url, headers);
     };

@@ -27,7 +27,6 @@ import (
 	"net/url"
 	"os"
 	"strconv"
-	"strings"
 
 	apiv1 "github.com/google/android-cuttlefish/frontend/src/liboperator/api/v1"
 	"github.com/gorilla/mux"
@@ -40,16 +39,16 @@ import (
 
 func createUnixSocketEndpoint(path string) (*net.UnixListener, error) {
 	if err := os.RemoveAll(path); err != nil {
-		return nil, fmt.Errorf("failed to clean previous socket: %w", err)
+		return nil, fmt.Errorf("Failed to clean previous socket: %w", err)
 	}
 	addr, err := net.ResolveUnixAddr("unixpacket", path)
 	if err != nil {
 		// Returns a loop function that will immediately return an error when invoked
-		return nil, fmt.Errorf("failed to create unix address from path: %w", err)
+		return nil, fmt.Errorf("Failed to create unix address from path: %w", err)
 	}
 	sock, err := net.ListenUnix("unixpacket", addr)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create unix socket: %w", err)
+		return nil, fmt.Errorf("Failed to create unix socket: %w", err)
 	}
 	// Make sure the socket is only accessible by owner and group
 	if err := os.Chmod(path, 0770); err != nil {
@@ -218,11 +217,10 @@ func PreRegister(c *JSONUnix, pool *DevicePool, msg *apiv1.PreRegisterMsg) {
 		regCh := make(chan bool, 1)
 		err := pool.PreRegister(
 			&apiv1.DeviceDescriptor{
-				DeviceId:  d.Id,
-				GroupName: msg.GroupName,
-				Owner:     msg.Owner,
-				Name:      d.Name,
-				ADBPort:   d.ADBPort,
+				DeviceId: d.Id,
+				GroupId:  msg.GroupName,
+				Owner:    msg.Owner,
+				Name:     d.Name,
 			},
 			regCh,
 		)
@@ -483,11 +481,6 @@ func openwrt(w http.ResponseWriter, r *http.Request, pool *DevicePool) {
 
 	url, _ := url.Parse("http://" + openwrtAddr)
 	proxy := httputil.NewSingleHostReverseProxy(url)
-	proxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
-		log.Printf("request %q failed: proxy error: %v", r.Method+" "+r.URL.Path, err)
-		w.Header().Add("x-cutf-proxy", "op-openwrt")
-		w.WriteHeader(http.StatusBadGateway)
-	}
 	r.URL.Path = "/devices/" + openwrtDevId + "/openwrt" + path
 	proxy.ServeHTTP(w, r)
 }
@@ -506,17 +499,12 @@ func adbProxy(w http.ResponseWriter, r *http.Request, pool *DevicePool) {
 	devInfo := dev.privateData.(map[string]interface{})
 
 	// Find adb port for the device.
-	adbPort := dev.Descriptor.ADBPort
-	if adbPort == 0 {
-		// ADB port might not be set if the device isn't started by cvd,
-		// some newer versions set it in the device info, make one last
-		// ditch attempt at finding it.
-		if adb_port, ok := devInfo["adb_port"]; ok {
-			adbPort = int(adb_port.(float64))
-		} else {
-			http.Error(w, "Cannot find adb port for the device", http.StatusNotFound)
-			return
-		}
+	adbPort := 0
+	if adb_port, ok := devInfo["adb_port"]; ok {
+		adbPort = int(adb_port.(float64))
+	} else {
+		http.Error(w, "Cannot find adb port for the device", http.StatusNotFound)
+		return
 	}
 
 	// Prepare WebSocket and TCP socket for ADB
@@ -538,20 +526,14 @@ func adbProxy(w http.ResponseWriter, r *http.Request, pool *DevicePool) {
 		pos:    0,
 		buf:    nil,
 	}
+	defer wsWrapper.Close()
 
 	// Redirect WebSocket to ADB tcp socket
 	go func() {
-		// TODO: Replace with checking net.ErrClosed after Go 1.16
-		if _, err := io.Copy(wsWrapper, tcpConn); err != nil && !strings.Contains(err.Error(), "use of closed network connection") {
-			log.Print("Error while io.Copy from ADB to WebSocket: ", err)
-		}
-		if err = wsWrapper.Close(); err != nil {
-			log.Print("Error while closing WebSocket: ", err)
-		}
+		io.Copy(wsWrapper, tcpConn)
+		wsWrapper.Close()
 	}()
-	if _, err = io.Copy(tcpConn, wsWrapper); err != nil {
-		log.Print("Error while io.Copy from WebSocket to ADB: ", err)
-	}
+	io.Copy(tcpConn, wsWrapper)
 }
 
 // Wrapper for implementing io.ReadWriteCloser of websocket.Conn
@@ -565,19 +547,16 @@ type wsIoWrapper struct {
 
 var _ io.ReadWriteCloser = (*wsIoWrapper)(nil)
 
-func (w *wsIoWrapper) Read(p []byte) (int, error) {
+func (w *wsIoWrapper) Read(buf []byte) (int, error) {
 	if w.buf == nil || w.pos >= len(w.buf) {
 		_, readBuf, err := w.wsConn.ReadMessage()
 		if err != nil {
-			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway) {
-				return 0, io.EOF
-			}
 			return 0, err
 		}
 		w.buf = readBuf
 		w.pos = 0
 	}
-	nRead := copy(p, w.buf[w.pos:])
+	nRead := copy(buf[:], w.buf[w.pos:])
 	w.pos += nRead
 	return nRead, nil
 }

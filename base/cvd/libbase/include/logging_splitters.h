@@ -17,7 +17,6 @@
 #pragma once
 
 #include <inttypes.h>
-#include <string.h>
 #include <time.h>
 
 #include <android-base/logging.h>

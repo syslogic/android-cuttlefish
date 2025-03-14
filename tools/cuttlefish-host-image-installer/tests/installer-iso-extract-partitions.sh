@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/bash
 
 extract_image() {
     disk1e="$1"

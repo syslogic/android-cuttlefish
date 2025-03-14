@@ -37,19 +37,22 @@
 #include <sys/uio.h>
 #include <unistd.h>
 
+#include <algorithm>
 #include <array>
 #include <cerrno>
 #include <chrono>
-#include <cstddef>
+#include <climits>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
 #include <ios>
 #include <iosfwd>
+#include <istream>
 #include <memory>
 #include <numeric>
 #include <ostream>
+#include <ratio>
 #include <regex>
 #include <string>
 #include <utility>
@@ -58,14 +61,12 @@
 #include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/macros.h>
-#include <android-base/parseint.h>
 #include <android-base/strings.h>
 #include <android-base/unique_fd.h>
 
 #include "common/libs/fs/shared_buf.h"
 #include "common/libs/fs/shared_fd.h"
 #include "common/libs/utils/contains.h"
-#include "common/libs/utils/in_sandbox.h"
 #include "common/libs/utils/inotify.h"
 #include "common/libs/utils/result.h"
 #include "common/libs/utils/subprocess.h"
@@ -77,8 +78,6 @@
 #endif
 
 namespace cuttlefish {
-
-static constexpr char kWhitespaceCharacters[] = " \n\t\r\v\f";
 
 bool FileExists(const std::string& path, bool follow_symlinks) {
   struct stat st {};
@@ -145,75 +144,8 @@ Result<std::string> CreateHardLink(const std::string& target,
   return hardlink;
 }
 
-Result<void> CreateSymLink(const std::string& target, const std::string& link,
-                           const bool overwrite_existing) {
-  if (FileExists(link), /* follow_symlink */ false) {
-    if (!overwrite_existing) {
-      return CF_ERRF(
-          "Cannot symlink from \"{}\" to \"{}\", the second file already "
-          "exists",
-          target, link);
-    }
-    CF_EXPECTF(unlink(link.c_str()) == 0,
-               "Failed to unlink \"{}\" with error: {}", link, strerror(errno));
-  }
-  CF_EXPECTF(symlink(target.c_str(), link.c_str()) == 0,
-             "link() failed trying to create symlink from \"{}\" to \"{}\" "
-             "with error: {}",
-             target, link, strerror(errno));
-  return {};
-}
-
 bool FileHasContent(const std::string& path) {
   return FileSize(path) > 0;
-}
-
-Result<void> HardLinkDirecoryContentsRecursively(
-    const std::string& source, const std::string& destination) {
-  CF_EXPECTF(IsDirectory(source), "Source '{}' is not a directory", source);
-  EnsureDirectoryExists(destination, 0755);
-
-  const std::function<bool(const std::string&)> linker =
-      [&source, &destination](const std::string& filepath) mutable {
-        std::string src_path = filepath;
-        std::string dst_path =
-            destination + "/" + filepath.substr(source.size() + 1);
-        if (IsDirectory(src_path)) {
-          EnsureDirectoryExists(dst_path);
-          return true;
-        }
-        bool overwrite_existing = true;
-        Result<std::string> result =
-            CreateHardLink(src_path, dst_path, overwrite_existing);
-        return result.ok();
-      };
-  CF_EXPECT(WalkDirectory(source, linker));
-
-  return {};
-}
-
-Result<void> MoveDirectoryContents(const std::string& source,
-                                   const std::string& destination) {
-  CF_EXPECTF(IsDirectory(source), "Source '{}' is not a directory", source);
-  CF_EXPECT(EnsureDirectoryExists(destination));
-
-  bool should_rename = CF_EXPECT(CanRename(source, destination));
-  std::vector<std::string> contents = CF_EXPECT(DirectoryContents(source));
-  for (const std::string& filepath : contents) {
-    std::string src_filepath = source + "/" + filepath;
-    std::string dst_filepath = destination + "/" + filepath;
-    if (should_rename) {
-      CF_EXPECT(rename(src_filepath.c_str(), dst_filepath.c_str()) == 0,
-                "rename " << src_filepath << " to " << dst_filepath
-                          << " failed: " << strerror(errno));
-    } else {
-      CF_EXPECT(
-          Copy(src_filepath, dst_filepath),
-          "copy " << src_filepath << " to " << dst_filepath << " failed.");
-    }
-  }
-
-  return {};
 }
 
 Result<std::vector<std::string>> DirectoryContents(const std::string& path) {
@@ -222,21 +154,9 @@ Result<std::vector<std::string>> DirectoryContents(const std::string& path) {
   CF_EXPECTF(dir != nullptr, "Could not read from dir \"{}\"", path);
   struct dirent* ent{};
   while ((ent = readdir(dir.get()))) {
-    if (strcmp(ent->d_name, ".") == 0 || strcmp(ent->d_name, "..") == 0) {
-      continue;
-    }
     ret.emplace_back(ent->d_name);
   }
   return ret;
-}
-
-Result<std::vector<std::string>> DirectoryContentsPaths(
-    const std::string& path) {
-  std::vector<std::string> result = CF_EXPECT(DirectoryContents(path));
-  for (std::string& filename : result) {
-    filename = fmt::format("{}/{}", path, filename);
-  }
-  return result;
 }
 
 bool DirectoryExists(const std::string& path, bool follow_symlinks) {
@@ -264,23 +184,19 @@ Result<void> EnsureDirectoryExists(const std::string& directory_path,
   }
   const auto parent_dir = android::base::Dirname(directory_path);
   if (parent_dir.size() > 1) {
-    CF_EXPECT(EnsureDirectoryExists(parent_dir, mode, group_name));
+    EnsureDirectoryExists(parent_dir, mode, group_name);
   }
   LOG(VERBOSE) << "Setting up " << directory_path;
   if (mkdir(directory_path.c_str(), mode) < 0 && errno != EEXIST) {
     return CF_ERRNO("Failed to create directory: \"" << directory_path << "\""
                                                      << strerror(errno));
   }
-  // TODO(schuffelen): Find an alternative for host-sandboxing mode
-  if (InSandbox()) {
-    return {};
-  }
 
   CF_EXPECTF(chmod(directory_path.c_str(), mode) == 0,
              "Failed to set permission on {}: {}", directory_path,
              strerror(errno));
 
-  if (!group_name.empty()) {
+  if (group_name != "") {
     CF_EXPECT(ChangeGroup(directory_path, group_name));
   }
 
@@ -296,7 +212,7 @@ Result<void> ChangeGroup(const std::string& path,
   }
 
   if (chown(path.c_str(), -1, groupId) != 0) {
-    return CF_ERRNO("Failed to set group for path: "
+    return CF_ERRNO("Feailed to set group for path: "
                     << path << ", " << group_name << ", " << strerror(errno));
   }
 
@@ -308,15 +224,16 @@ bool CanAccess(const std::string& path, const int mode) {
 }
 
 bool IsDirectoryEmpty(const std::string& path) {
-  std::unique_ptr<DIR, int (*)(DIR*)> direc(opendir(path.c_str()), closedir);
+  auto direc = ::opendir(path.c_str());
   if (!direc) {
     LOG(ERROR) << "IsDirectoryEmpty test failed with " << path
                << " as it failed to be open" << std::endl;
     return false;
   }
 
+  decltype(::readdir(direc)) sub = nullptr;
   int cnt {0};
-  while (::readdir(direc.get())) {
+  while ( (sub = ::readdir(direc)) ) {
     cnt++;
     if (cnt > 2) {
     LOG(ERROR) << "IsDirectoryEmpty test failed with " << path
@@ -484,13 +401,12 @@ bool MakeFileExecutable(const std::string& path) {
   return chmod(path.c_str(), S_IRWXU) == 0;
 }
 
-Result<std::chrono::system_clock::time_point> FileModificationTime(
-    const std::string& path) {
-  struct stat st;
-  CF_EXPECTF(stat(path.c_str(), &st) == 0,
-             "stat() failed retrieving file modification time on \"{}\" with "
-             "error: {}",
-             path, strerror(errno));
+// TODO(schuffelen): Use std::filesystem::last_write_time when on C++17
+std::chrono::system_clock::time_point FileModificationTime(const std::string& path) {
+  struct stat st {};
+  if (stat(path.c_str(), &st) == -1) {
+    return std::chrono::system_clock::time_point();
+  }
 #ifdef __linux__
   std::chrono::seconds seconds(st.st_mtim.tv_sec);
 #elif defined(__APPLE__)
@@ -554,17 +470,13 @@ Result<std::string> ReadFileContents(const std::string& filepath) {
 }
 
 std::string CurrentDirectory() {
-  std::vector<char> process_wd(1 << 12, ' ');
-  while (getcwd(process_wd.data(), process_wd.size()) == nullptr) {
-    if (errno == ERANGE) {
-      process_wd.resize(process_wd.size() * 2, ' ');
-    } else {
-      PLOG(ERROR) << "getcwd failed";
-      return "";
-    }
+  std::unique_ptr<char, void (*)(void*)> cwd(getcwd(nullptr, 0), &free);
+  std::string process_cwd(cwd.get());
+  if (!cwd) {
+    PLOG(ERROR) << "`getcwd(nullptr, 0)` failed";
+    return "";
   }
-  // Will find the null terminator and size the string appropriately.
-  return std::string(process_wd.data());
+  return process_cwd;
 }
 
 FileSizes SparseFileSizes(const std::string& path) {
@@ -614,46 +526,38 @@ FileSizes SparseFileSizes(const std::string& path) {
   return (FileSizes) { .sparse_size = farthest_seek, .disk_size = data_bytes };
 }
 
+std::string cpp_basename(const std::string& str) {
+  char* copy = strdup(str.c_str()); // basename may modify its argument
+  std::string ret(basename(copy));
+  free(copy);
+  return ret;
+}
+
+std::string cpp_dirname(const std::string& str) {
+  return android::base::Dirname(str);
+}
+
 bool FileIsSocket(const std::string& path) {
   struct stat st {};
   return stat(path.c_str(), &st) == 0 && S_ISSOCK(st.st_mode);
 }
 
-// return unit determined by the `--block-size` argument
-Result<std::size_t> GetDiskUsage(const std::string& path,
-                                 const std::string& size_arg) {
+int GetDiskUsage(const std::string& path) {
   Command du_cmd("du");
-  du_cmd.AddParameter("-s");  // summarize, only output total
-  du_cmd.AddParameter(
-      "--apparent-size");  // apparent size rather than device usage
-  du_cmd.AddParameter("--block-size=" + size_arg);
+  du_cmd.AddParameter("-b");
+  du_cmd.AddParameter("-k");
+  du_cmd.AddParameter("-s");
   du_cmd.AddParameter(path);
-
-  std::string out;
-  std::string err;
-  int return_code = RunWithManagedStdio(std::move(du_cmd), nullptr, &out, &err);
-  CF_EXPECTF(return_code == 0, "Failed to run `du` command.  stderr: {}", err);
-  CF_EXPECTF(!out.empty(), "No output read from `du` command. stderr: {}", err);
-  std::vector<std::string> split_out =
-      android::base::Tokenize(out, kWhitespaceCharacters);
-  CF_EXPECTF(!split_out.empty(),
-             "No valid output read from `du` command in \"{}\"", out);
-  std::string total = split_out.front();
-
-  std::size_t result;
-  CF_EXPECTF(android::base::ParseUint(total, &result),
-             "Failure parsing \"{}\" to integer.", total);
-  return result;
-}
-
-Result<std::size_t> GetDiskUsageBytes(const std::string& path) {
-  return CF_EXPECTF(GetDiskUsage(path, "1"),
-                    "Unable to determine disk usage of file \"{}\"", path);
-}
-
-Result<std::size_t> GetDiskUsageGigabytes(const std::string& path) {
-  return CF_EXPECTF(GetDiskUsage(path, "1G"),
-                    "Unable to determine disk usage of file \"{}\"", path);
+  SharedFD read_fd;
+  SharedFD write_fd;
+  SharedFD::Pipe(&read_fd, &write_fd);
+  du_cmd.RedirectStdIO(Subprocess::StdIOChannel::kStdOut, write_fd);
+  auto subprocess = du_cmd.Start();
+  std::array<char, 1024> text_output{};
+  const auto bytes_read = read_fd->Read(text_output.data(), text_output.size());
+  CHECK_GT(bytes_read, 0) << "Failed to read from pipe " << strerror(errno);
+  std::move(subprocess).Wait();
+  return atoi(text_output.data()) * 1024;
 }
 
 /**
@@ -674,19 +578,15 @@ std::string FindImage(const std::string& search_path,
   return "";
 }
 
-Result<std::string> FindFile(const std::string& path,
-                             const std::string& target_name) {
+std::string FindFile(const std::string& path, const std::string& target_name) {
   std::string ret;
-  auto res = WalkDirectory(
-      path, [&ret, &target_name](const std::string& filename) mutable {
-        if (android::base::Basename(filename) == target_name) {
-          ret = filename;
-        }
-        return true;
-      });
-  if (!res.ok()) {
-    return "";
-  }
+  WalkDirectory(path,
+                [&ret, &target_name](const std::string& filename) mutable {
+                  if (cpp_basename(filename) == target_name) {
+                    ret = filename;
+                  }
+                  return true;
+                });
   return ret;
 }
 
@@ -697,14 +597,14 @@ Result<void> WalkDirectory(
     const std::function<bool(const std::string&)>& callback) {
   const auto files = CF_EXPECT(DirectoryContents(dir));
   for (const auto& filename : files) {
+    if (filename == "." || filename == "..") {
+      continue;
+    }
     auto file_path = dir + "/";
     file_path.append(filename);
     callback(file_path);
     if (DirectoryExists(file_path)) {
-      auto res = WalkDirectory(file_path, callback);
-      if (!res.ok()) {
-        return res;
-      }
+      WalkDirectory(file_path, callback);
     }
   }
   return {};
@@ -735,8 +635,8 @@ static Result<void> WaitForFileInternal(const std::string& path, int timeoutSec,
   const auto targetTime =
       std::chrono::system_clock::now() + std::chrono::seconds(timeoutSec);
 
-  const std::string parentPath = android::base::Dirname(path);
-  const std::string filename = android::base::Basename(path);
+  const auto parentPath = cpp_dirname(path);
+  const auto filename = cpp_basename(path);
 
   CF_EXPECT(WaitForFile(parentPath, timeoutSec),
             "Error while waiting for parent directory creation");
@@ -780,7 +680,7 @@ static Result<void> WaitForFileInternal(const std::string& path, int timeoutSec,
 
     auto names = GetCreatedFileListFromInotifyFd(inotify);
 
-    CF_EXPECT(!names.empty(),
+    CF_EXPECT(names.size() > 0,
               "Failed to get names from inotify " << strerror(errno));
 
     if (Contains(names, filename)) {
@@ -849,7 +749,7 @@ Result<void> WaitForUnixSocketListeningWithoutConnect(const std::string& path,
       return CF_ERR("Timed out");
     }
 
-    Command lsof("/usr/bin/lsof");
+    Command lsof("lsof");
     lsof.AddParameter(/*"format"*/ "-F", /*"connection state"*/ "TST");
     lsof.AddParameter(path);
     std::string lsof_out;

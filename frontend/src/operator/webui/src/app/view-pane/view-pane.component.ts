@@ -1,4 +1,12 @@
-import {Component, OnInit, OnDestroy, AfterViewInit, ViewChild, ElementRef, inject} from '@angular/core';
+import {
+  Component,
+  OnInit,
+  OnDestroy,
+  AfterViewInit,
+  ViewChild,
+  Inject,
+  ElementRef,
+} from '@angular/core';
 import {DisplaysService} from '../displays.service';
 import {
   asyncScheduler,
@@ -16,7 +24,6 @@ import {
   ktdTrackById,
 } from '@katoid/angular-grid-layout';
 import {DOCUMENT} from '@angular/common';
-import {DisplayInfo} from '../../../../intercept/js/server_connector'
 
 interface DeviceGridItem extends KtdGridLayoutItem {
   id: string;
@@ -26,7 +33,6 @@ interface DeviceGridItem extends KtdGridLayoutItem {
   h: number;
   display_width: number | null;
   display_height: number | null;
-  display_count: number;
   zoom: number;
   visible: boolean;
   placed: boolean;
@@ -40,22 +46,16 @@ interface DeviceGridItemUpdate {
 }
 
 @Component({
-  standalone: false,
   selector: 'app-view-pane',
   templateUrl: './view-pane.component.html',
   styleUrls: ['./view-pane.component.scss'],
 })
 export class ViewPaneComponent implements OnInit, OnDestroy, AfterViewInit {
-  @ViewChild(KtdGridComponent, { static: true })
-  grid!: KtdGridComponent;
-  @ViewChild('viewPane', { static: true })
-  viewPane!: ElementRef;
+  @ViewChild(KtdGridComponent, {static: true}) grid!: KtdGridComponent;
+  @ViewChild('viewPane', {static: true}) viewPane!: ElementRef;
+
   resizeSubscription!: Subscription;
   resizeObserver!: ResizeObserver;
-
-  displaysService = inject(DisplaysService);
-  document = inject<Document>(DOCUMENT);
-
 
   cols$ = new BehaviorSubject<number>(0);
   cols = 0;
@@ -70,34 +70,15 @@ export class ViewPaneComponent implements OnInit, OnDestroy, AfterViewInit {
   private readonly defaultDisplayHeight = 1280;
   private readonly defaultDisplayZoom = 0.5;
 
-  // 10px (20 for left+right, 20 for top+bottom) on all four sides of each
-  // display.
-  private readonly displayMargin = 20;
-
-  // Does not include vertical margins of display device (displayMargin)
-  private readonly panelTitleHeight = 53;
-  private readonly displayTitleHeight = 48;
-
-  // Note this is constant because displays appear on a single horizontal row.
-  private readonly totalVerticalSpacing
-      = this.panelTitleHeight
-      + this.displayTitleHeight
-      + this.displayMargin;
-
-  private totalHorizontalSpacing(item: DeviceGridItem): number {
-    const iconPanelWidth = 58;
-    const cnt = item.display_count || 1;
-
-    // Separate displays are shown in a row left-to-right, so each new devices
-    // adds more margin space.
-    // Note we assume control-panel-custom-buttons are not visible. The risk is
-    // that they really are, in which case the zoom will be over-calculated and
-    // extra vertical space will appear below the displays. Ideally the device
-    // would report how much spacing is required in each direction.
-    return cnt * this.displayMargin + iconPanelWidth;
-  }
+  private readonly iconPanelWidth = 58;
+  private readonly panelTitleHeight = 40;
 
   private readonly freeScale = 0;
+
+  constructor(
+    public displaysService: DisplaysService,
+    @Inject(DOCUMENT) public document: Document
+  ) {}
 
   ngOnInit(): void {
     this.resizeObserver = new ResizeObserver(entries => {
@@ -125,59 +106,66 @@ export class ViewPaneComponent implements OnInit, OnDestroy, AfterViewInit {
     this.resizeObserver.unobserve(this.viewPane.nativeElement);
   }
 
-  private visibleDevicesChanged: Observable<DeviceGridItemUpdate[]> = this.displaysService.getDeviceVisibilities().pipe(map(deviceVisibilityInfos => deviceVisibilityInfos.map(info => {
-    return {
-      values: {
-        ...this.createDeviceGridItem(info.id),
-        visible: info.visible,
-      },
-      overwrites: ['visible'],
-      source: this.visibleDeviceSource,
-    };
-  })));
-  private displayInfoChanged: Observable<DeviceGridItemUpdate[]> = this.displaysService.getDisplayInfoChanged().pipe(map(displayInfo => {
-    const updateValues = this.createDeviceGridItem(displayInfo.device_id);
-    const overwrites = [];
-    if (displayInfo.displays.length !== 0) {
-      let w = 0, h = 0;
-      displayInfo.displays.forEach((d: DisplayInfo) => {
-        w += d.width;
-        h = Math.max(d.height, h);
-      });
-      updateValues.display_width = w;
-      updateValues.display_height = h;
-      overwrites.push('display_width');
-      overwrites.push('display_height');
-      // Display service occasionally sends a dummy update - do not
-      // overwrite display count in that case.
-      if (displayInfo.displays[0].width !== 0) {
-        updateValues.display_count = displayInfo.displays.length;
-        overwrites.push('display_count');
-      }
-    }
-    return [
-      {
-        values: updateValues,
-        overwrites: overwrites,
-        source: this.displayInfoSource,
-      },
-    ];
-  }));
-  private layoutUpdated: Observable<DeviceGridItemUpdate[]> = this.layoutUpdated$.pipe(map(newLayout => {
-    return newLayout.map(layoutItem => {
-      const updateValues = this.createDeviceGridItem(layoutItem.id);
-      const overwrites = ['x', 'y', 'w', 'h'];
-      updateValues.x = layoutItem.x;
-      updateValues.y = layoutItem.y;
-      updateValues.w = layoutItem.w;
-      updateValues.h = layoutItem.h;
-      return {
-        values: updateValues,
-        overwrites: overwrites,
-        source: this.layoutUpdateSource,
-      };
-    });
-  }));
+  private visibleDevicesChanged: Observable<DeviceGridItemUpdate[]> =
+    this.displaysService.getDeviceVisibilities().pipe(
+      map(deviceVisibilityInfos =>
+        deviceVisibilityInfos.map(info => {
+          return {
+            values: {
+              ...this.createDeviceGridItem(info.id),
+              visible: info.visible,
+            },
+            overwrites: ['visible'],
+            source: this.visibleDeviceSource,
+          };
+        })
+      )
+    );
+
+  private displayInfoChanged: Observable<DeviceGridItemUpdate[]> =
+    this.displaysService.getDisplayInfoChanged().pipe(
+      map(displayInfo => {
+        const updateValues = this.createDeviceGridItem(displayInfo.device_id);
+        const overwrites = [];
+
+        if (displayInfo.displays.length !== 0) {
+          updateValues.display_width = displayInfo.displays[0].width;
+          updateValues.display_height = displayInfo.displays[0].height;
+
+          overwrites.push('display_width');
+          overwrites.push('display_height');
+        }
+
+        return [
+          {
+            values: updateValues,
+            overwrites: overwrites,
+            source: this.displayInfoSource,
+          },
+        ];
+      })
+    );
+
+  private layoutUpdated: Observable<DeviceGridItemUpdate[]> =
+    this.layoutUpdated$.pipe(
+      map(newLayout => {
+        return newLayout.map(layoutItem => {
+          const updateValues = this.createDeviceGridItem(layoutItem.id);
+          const overwrites = ['x', 'y', 'w', 'h'];
+
+          updateValues.x = layoutItem.x;
+          updateValues.y = layoutItem.y;
+          updateValues.w = layoutItem.w;
+          updateValues.h = layoutItem.h;
+
+          return {
+            values: updateValues,
+            overwrites: overwrites,
+            source: this.layoutUpdateSource,
+          };
+        });
+      })
+    );
 
   private adjustNewLayout(item: DeviceGridItem): DeviceGridItem {
     if (item.display_width === null || item.display_height === null)
@@ -190,17 +178,17 @@ export class ViewPaneComponent implements OnInit, OnDestroy, AfterViewInit {
       return item;
 
     const zoom = Math.min(
-      (item.w - this.totalHorizontalSpacing(item)) / item.display_width,
-      (item.h - this.totalVerticalSpacing) / item.display_height
+      (item.w - this.iconPanelWidth) / item.display_width,
+      (item.h - this.panelTitleHeight) / item.display_height
     );
 
     item.w = Math.max(
       this.minPanelWidth,
-      zoom * item.display_width + this.totalHorizontalSpacing(item)
+      zoom * item.display_width + this.iconPanelWidth
     );
     item.h = Math.max(
       this.minPanelHeight,
-      zoom * item.display_height + this.totalVerticalSpacing
+      zoom * item.display_height + this.panelTitleHeight
     );
     item.zoom = zoom;
 
@@ -222,11 +210,11 @@ export class ViewPaneComponent implements OnInit, OnDestroy, AfterViewInit {
 
       item.w = Math.max(
         this.minPanelWidth,
-        zoom * item.display_width + this.totalHorizontalSpacing(item)
+        zoom * item.display_width + this.iconPanelWidth
       );
       item.h = Math.max(
         this.minPanelHeight,
-        zoom * item.display_height + this.totalVerticalSpacing
+        zoom * item.display_height + this.panelTitleHeight
       );
     }
 
@@ -257,45 +245,64 @@ export class ViewPaneComponent implements OnInit, OnDestroy, AfterViewInit {
     return item;
   }
 
-  resultLayout: Observable<DeviceGridItem[]> = merge(this.visibleDevicesChanged, this.displayInfoChanged, this.layoutUpdated).pipe(scan((currentLayout: DeviceGridItem[], updateInfos: DeviceGridItemUpdate[]) => {
-    const layoutById = new Map(currentLayout.map(item => [item.id, item]));
-    updateInfos.forEach(updateItem => {
-      const id = updateItem.values.id;
-      let item = layoutById.has(id)
-        ? layoutById.get(id)!
-        : updateItem.values;
-        updateItem.overwrites.forEach(prop => {
-          // Ignore force show display message when display size is already set
-          if ((prop === 'display_width' || prop === 'display_height')
-              && item[prop] !== null && item[prop] !== this.freeScale
-            && updateItem.values[prop] === this.freeScale) {
-              return;
+  resultLayout: Observable<DeviceGridItem[]> = merge(
+    this.visibleDevicesChanged,
+    this.displayInfoChanged,
+    this.layoutUpdated
+  ).pipe(
+    scan(
+      (
+        currentLayout: DeviceGridItem[],
+        updateInfos: DeviceGridItemUpdate[]
+      ) => {
+        const layoutById = new Map(currentLayout.map(item => [item.id, item]));
+
+        updateInfos.forEach(updateItem => {
+          const id = updateItem.values.id;
+          let item = layoutById.has(id)
+            ? layoutById.get(id)!
+            : updateItem.values;
+
+          updateItem.overwrites.forEach(prop => {
+            // Ignore force show display message when display size is already set
+            if ((prop === 'display_width' || prop === 'display_height')
+               && item[prop] !== null && item[prop] !== this.freeScale
+               && updateItem.values[prop] === this.freeScale) {
+                 return;
             }
+
             item[prop] = updateItem.values[prop]!;
-        });
-        switch (updateItem.source) {
-          case this.visibleDeviceSource: {
-            if (!item.placed && item.visible) {
-              // When a new item is set visible
-              item = this.placeNewItem(item, currentLayout);
+          });
+
+          switch (updateItem.source) {
+            case this.visibleDeviceSource: {
+              if (!item.placed && item.visible) {
+                // When a new item is set visible
+                item = this.placeNewItem(item, currentLayout);
+              }
+              break;
             }
-            break;
+            case this.layoutUpdateSource: {
+              // When layout is changed
+              item = this.adjustNewLayout(item);
+              break;
+            }
+            case this.displayInfoSource: {
+              // When device display info is changed
+              item = this.adjustDisplayInfo(item);
+              break;
+            }
           }
-          case this.layoutUpdateSource: {
-            // When layout is changed
-            item = this.adjustNewLayout(item);
-            break;
-          }
-          case this.displayInfoSource: {
-            // When device display info is changed
-            item = this.adjustDisplayInfo(item);
-            break;
-          }
-        }
-        layoutById.set(id, item);
-    });
-    return Array.from(layoutById, ([, value]) => value);
-  }, []), map(items => items.filter(item => item.visible)));
+
+          layoutById.set(id, item);
+        });
+
+        return Array.from(layoutById, ([, value]) => value);
+      },
+      []
+    ),
+    map(items => items.filter(item => item.visible))
+  );
 
   forceShowDevice(deviceId: string) {
     this.displaysService.onDeviceDisplayInfo({
@@ -306,7 +313,7 @@ export class ViewPaneComponent implements OnInit, OnDestroy, AfterViewInit {
           display_id: '0',
           width: this.freeScale,
           height: this.freeScale,
-        } as DisplayInfo,
+        },
       ],
     });
   }
@@ -324,7 +331,6 @@ export class ViewPaneComponent implements OnInit, OnDestroy, AfterViewInit {
       h: this.minPanelHeight,
       display_width: null,
       display_height: null,
-      display_count: 0,
       zoom: this.defaultDisplayZoom,
       visible: false,
       placed: false,

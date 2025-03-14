@@ -17,11 +17,12 @@
 
 #include <optional>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include <gtest/gtest.h>
 
-#include "host/commands/cvd/cli/types.h"
+#include "host/commands/cvd/types.h"
 
 namespace cuttlefish {
 namespace selector {

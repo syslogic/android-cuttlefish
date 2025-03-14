@@ -14,15 +14,12 @@
  * limitations under the License.
  */
 
-#include <stdlib.h>
 #include <sys/resource.h>
 #include <sys/stat.h>
-#include <time.h>
 #include <unistd.h>
 
 #include <iostream>
 #include <string>
-#include <unordered_map>
 #include <vector>
 
 #include <android-base/file.h>
@@ -32,14 +29,15 @@
 
 #include "common/libs/utils/environment.h"
 #include "common/libs/utils/files.h"
-#include "common/libs/utils/flag_parser.h"
 #include "common/libs/utils/subprocess.h"
+#include "host/commands/cvd/client.h"
 #include "host/commands/cvd/cvd.h"
-#include "host/commands/cvd/legacy/client.h"
-#include "host/commands/cvd/utils/common.h"
+#include "host/commands/cvd/common_utils.h"
+#include "host/commands/cvd/fetch/fetch_cvd.h"
+#include "host/commands/cvd/flag.h"
 // TODO(315772518) Re-enable once metrics send is reenabled
 // #include "host/commands/cvd/metrics/cvd_metrics_api.h"
-#include "host/commands/cvd/legacy/run_server.h"
+#include "host/commands/cvd/run_server.h"
 
 namespace cuttlefish {
 namespace {
@@ -145,7 +143,7 @@ void IncreaseFileLimit() {
     return;
   }
   LOG(VERBOSE) << "Old limits -> soft limit= " << old_lim.rlim_cur << "\t"
-               << " hard limit= " << old_lim.rlim_max;
+            << " hard limit= " << old_lim.rlim_max;
   // Set new value
   old_lim.rlim_cur = old_lim.rlim_max;
   // Set limits
@@ -157,7 +155,8 @@ void IncreaseFileLimit() {
   }
 }
 
-Result<void> CvdMain(int argc, char** argv, char** envp) {
+Result<void> CvdMain(int argc, char** argv, char** envp,
+                     const android::base::LogSeverity verbosity) {
   CF_EXPECT(EnsureCvdDirectoriesExist());
 
   CF_EXPECT(KillOldServer());
@@ -180,23 +179,26 @@ Result<void> CvdMain(int argc, char** argv, char** envp) {
     TryInheritServerDatabase();
   }
 
+
   auto env = EnvpToMap(envp);
   // TODO(315772518) Re-enable once metrics send is skipped in a env
   // without network support
   // CvdMetrics::SendCvdMetrics(all_args);
 
   if (android::base::Basename(all_args[0]) == "fetch_cvd") {
-    // Convert `fetch_cvd args...` into `cvd fetch args...`
-    all_args[0] = "fetch";
-    all_args.insert(all_args.begin(), "cvd");
+    CF_EXPECT(FetchCvdMain(argc, argv));
+    return {};
   }
 
   IncreaseFileLimit();
 
   InstanceLockFileManager instance_lockfile_manager;
-  InstanceDatabase instance_db(InstanceDatabasePath());
-  InstanceManager instance_manager(instance_lockfile_manager, instance_db);
-  Cvd cvd(instance_manager, instance_lockfile_manager);
+  auto host_tool_target_manager = NewHostToolTargetManager();
+  selector::InstanceDatabase instance_db(InstanceDatabasePath());
+  InstanceManager instance_manager(instance_lockfile_manager,
+                                   *host_tool_target_manager, instance_db);
+  Cvd cvd(verbosity, instance_lockfile_manager, instance_manager,
+          *host_tool_target_manager);
 
   // TODO(b/206893146): Make this decision inside the server.
   if (android::base::Basename(all_args[0]) == "acloud") {
@@ -257,15 +259,13 @@ std::string ColoredUrl(const std::string& url) {
 }  // namespace cuttlefish
 
 int main(int argc, char** argv, char** envp) {
-  srand(time(NULL));
-
   android::base::LogSeverity verbosity =
       cuttlefish::CvdVerbosityOption(argc, argv);
   android::base::InitLogging(argv, android::base::StderrLogger);
   // set verbosity for this process
   cuttlefish::SetMinimumVerbosity(verbosity);
 
-  auto result = cuttlefish::CvdMain(argc, argv, envp);
+  auto result = cuttlefish::CvdMain(argc, argv, envp, verbosity);
   if (result.ok()) {
     return 0;
   } else {

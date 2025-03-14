@@ -25,7 +25,6 @@ inline constexpr char kDefaultUuidPrefix[] =
 inline constexpr char kCuttlefishConfigEnvVarName[] = "CUTTLEFISH_CONFIG_FILE";
 inline constexpr char kCuttlefishInstanceEnvVarName[] = "CUTTLEFISH_INSTANCE";
 inline constexpr char kVsocUserPrefix[] = "vsoc-";
-inline constexpr char kInternalGroupName[] = "cvd";
 inline constexpr char kCvdNamePrefix[] = "cvd-";
 inline constexpr char kBootStartedMessage[] = "VIRTUAL_DEVICE_BOOT_STARTED";
 inline constexpr char kBootPendingMessage[] = "VIRTUAL_DEVICE_BOOT_PENDING";
@@ -42,8 +41,6 @@ inline constexpr char kAdbdStartedMessage[] =
     "init: starting service 'adbd'...";
 inline constexpr char kFastbootdStartedMessage[] =
     "init: starting service 'fastbootd'...";
-inline constexpr char kHibernationExitMessage[] =
-    "PM: hibernation: hibernation exit";
 inline constexpr char kFastbootStartedMessage[] =
     "Listening for fastboot command on tcp";
 inline constexpr char kScreenChangedMessage[] = "VIRTUAL_DEVICE_SCREEN_CHANGED";

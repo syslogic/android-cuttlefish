@@ -37,7 +37,7 @@ Result<std::vector<std::string>> ExtractHelper(
 
   auto it = files.begin();
   while (it != files.end()) {
-    if (it->empty() || android::base::EndsWith(*it, "/")) {
+    if (*it == "" || android::base::EndsWith(*it, "/")) {
       it = files.erase(it);
     } else {
       *it = target_directory + "/" + *it;
@@ -53,17 +53,41 @@ Result<std::vector<std::string>> ExtractHelper(
   return {files};
 }
 
-Result<std::vector<std::string>> ExtractFiles(
-    const std::string& archive, const std::vector<std::string>& to_extract,
-    const std::string& target_directory) {
-  Command bsdtar_cmd = Command("/usr/bin/bsdtar")
-                           .AddParameter("-x")
-                           .AddParameter("-v")
-                           .AddParameter("-C")
-                           .AddParameter(target_directory)
-                           .AddParameter("-f")
-                           .AddParameter(archive)
-                           .AddParameter("-S");
+}  // namespace
+
+Archive::Archive(const std::string& file) : file_(file) {}
+
+Archive::~Archive() {}
+
+std::vector<std::string> Archive::Contents() {
+  Command bsdtar_cmd("/usr/bin/bsdtar");
+  bsdtar_cmd.AddParameter("-tf");
+  bsdtar_cmd.AddParameter(file_);
+  std::string bsdtar_input, bsdtar_output;
+  auto bsdtar_ret = RunWithManagedStdio(std::move(bsdtar_cmd), &bsdtar_input,
+                                             &bsdtar_output, nullptr);
+  if (bsdtar_ret != 0) {
+    LOG(ERROR) << "`bsdtar -tf \"" << file_ << "\"` returned " << bsdtar_ret;
+  }
+  return bsdtar_ret == 0
+      ? android::base::Split(bsdtar_output, "\n")
+      : std::vector<std::string>();
+}
+
+bool Archive::ExtractAll(const std::string& target_directory) {
+  return ExtractFiles({}, target_directory);
+}
+
+bool Archive::ExtractFiles(const std::vector<std::string>& to_extract,
+                           const std::string& target_directory) {
+  Command bsdtar_cmd("/usr/bin/bsdtar");
+  bsdtar_cmd.AddParameter("-x");
+  bsdtar_cmd.AddParameter("-v");
+  bsdtar_cmd.AddParameter("-C");
+  bsdtar_cmd.AddParameter(target_directory);
+  bsdtar_cmd.AddParameter("-f");
+  bsdtar_cmd.AddParameter(file_);
+  bsdtar_cmd.AddParameter("-S");
   for (const auto& extract : to_extract) {
     bsdtar_cmd.AddParameter(extract);
   }
@@ -73,32 +97,35 @@ Result<std::vector<std::string>> ExtractFiles(
   int bsdtar_ret = RunWithManagedStdio(std::move(bsdtar_cmd), nullptr, nullptr,
                                        &bsdtar_output);
   LOG(DEBUG) << bsdtar_output;
-  CF_EXPECTF(bsdtar_ret == 0, "bsdtar extraction failed on '{}', '''{}'''",
-             archive, bsdtar_output);
-
-  std::vector<std::string> outputs = android::base::Split(bsdtar_output, "\n");
-  for (std::string& output : outputs) {
-    std::string_view view = output;
-    android::base::ConsumePrefix(&view, "x ");
-    output = view;
+  if (bsdtar_ret != 0) {
+    LOG(ERROR) << "bsdtar extraction on \"" << file_ << "\" returned "
+               << bsdtar_ret;
   }
-
-  return outputs;
+  return bsdtar_ret == 0;
 }
 
-Result<std::vector<std::string>> ExtractAll(
-    const std::string& archive, const std::string& target_directory) {
-  std::vector<std::string> out =
-      CF_EXPECT(ExtractFiles(archive, {}, target_directory));
-  return out;
+std::string Archive::ExtractToMemory(const std::string& path) {
+  Command bsdtar_cmd("/usr/bin/bsdtar");
+  bsdtar_cmd.AddParameter("-xf");
+  bsdtar_cmd.AddParameter(file_);
+  bsdtar_cmd.AddParameter("-O");
+  bsdtar_cmd.AddParameter(path);
+  std::string stdout_str;
+  auto ret =
+      RunWithManagedStdio(std::move(bsdtar_cmd), nullptr, &stdout_str, nullptr);
+  if (ret != 0) {
+    LOG(ERROR) << "Could not extract \"" << path << "\" from \"" << file_
+               << "\" to memory.";
+    return "";
+  }
+  return stdout_str;
 }
-
-}  // namespace
 
 Result<std::vector<std::string>> ExtractImages(
     const std::string& archive_filepath, const std::string& target_directory,
     const std::vector<std::string>& images, const bool keep_archive) {
-  CF_EXPECT(ExtractFiles(archive_filepath, images, target_directory),
+  Archive archive(archive_filepath);
+  CF_EXPECT(archive.ExtractFiles(images, target_directory),
             "Could not extract images from \"" << archive_filepath << "\" to \""
                                                << target_directory << "\"");
 
@@ -118,11 +145,12 @@ Result<std::string> ExtractImage(const std::string& archive_filepath,
 Result<std::vector<std::string>> ExtractArchiveContents(
     const std::string& archive_filepath, const std::string& target_directory,
     const bool keep_archive) {
-  std::vector<std::string> files =
-      CF_EXPECT(ExtractAll(archive_filepath, target_directory),
-                "Could not extract \"" << archive_filepath << "\" to \""
-                                       << target_directory << "\"");
+  Archive archive(archive_filepath);
+  CF_EXPECT(archive.ExtractAll(target_directory),
+            "Could not extract \"" << archive_filepath << "\" to \""
+                                   << target_directory << "\"");
 
+  std::vector<std::string> files = archive.Contents();
   return ExtractHelper(files, archive_filepath, target_directory, keep_archive);
 }
 

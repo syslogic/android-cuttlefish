@@ -1,47 +1,4 @@
-cuttlefish-frontend (1.2.0) UNRELEASED; urgency=medium
-
-  * 
-
- -- Chad Reynolds <chadreynolds@google.com>  Fri, 24 Jan 2025 11:24:30 -0800
-
-cuttlefish-frontend (1.1.0) stable; urgency=medium
-
-  * the adb bugreport can now be included in the cvd bugreport
-  * add --log_file flag
-
- -- Jorge Moreira <jemoreira@google.com>  Fri, 01 Nov 2024 16:02:34 -0700
-
-cuttlefish-frontend (1.0.0) stable; urgency=medium
-
-  [ Sergio A. Rodriguez ]
-  * Send build api credentials through the host orchestrator client
-  * Host Orchestrator support for snapshots.
-
- -- Jorge Moreira <jemoreira@google.com>  Thu, 05 Sep 2024 11:06:56 -0700
-
-cuttlefish-frontend (0.9.31) unstable; urgency=medium
-
-  [ Sergio A. Rodriguez ]
-  * Fix /logs endpoint permissions
-  * Return all devices on /cvds endpoint
-
-  [ Jorge E. Moreira ]
-  * Host Orchestrator uses the new cvd commands create and remove
-  * New Host Orchestrator endpoints for cvd start and stop
-
- -- Jorge Moreira <jemoreira@google.com>  Mon, 12 Aug 2024 16:53:19 -0700
-
-cuttlefish-frontend (0.9.30) stable; urgency=medium
-
-  [ Sergio A. Rodriguez - cuttlefish-orchestration ]
-  * cvd bug reports endpoint
-
-  [Jaeman Park - cuttlefish-user]
-  * Websocket endpoint for ADB
-
- -- Jorge Moreira <jemoreira@google.com>  Mon, 29 Jul 2024 15:43:17 -0700
-
-cuttlefish-frontend (0.9.29) stable; urgency=medium
+cuttlefish-frontend (0.9.29) unstable; urgency=medium
 
   [ Jorge E. Moreira ]
   * Make cuttlefish-orchestration depend on cuttlefish-user.

@@ -192,7 +192,7 @@ Result<ucred> UnixSocketMessage::Credentials() {
       credentials.push_back(creds);
     }
   }
-  if (credentials.empty()) {
+  if (credentials.size() == 0) {
     return CF_ERR("No credentials present");
   } else if (credentials.size() == 1) {
     return credentials[0];

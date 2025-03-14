@@ -116,6 +116,11 @@ func (h *Manager) GetBootloaderBundle(buildID, target string, fetcher Fetcher) (
 	return outDir, nil
 }
 
+type downloadResult struct {
+	OutDir string
+	Error  error
+}
+
 var defaultRegistry = newRegistry()
 
 type registry struct {

@@ -16,71 +16,36 @@ package orchestrator
 
 import (
 	"log"
-	"os/user"
 
-	apiv1 "github.com/google/android-cuttlefish/frontend/src/host_orchestrator/api/v1"
 	"github.com/google/android-cuttlefish/frontend/src/host_orchestrator/orchestrator/cvd"
-	"github.com/google/android-cuttlefish/frontend/src/host_orchestrator/orchestrator/exec"
+	apiv1 "github.com/google/android-cuttlefish/frontend/src/liboperator/api/v1"
+	"github.com/google/android-cuttlefish/frontend/src/liboperator/operator"
 )
 
-type execCvdCommand interface {
-	exec(cvd *cvd.CLI, sel cvd.Selector) error
-}
-
-type startCvdCommand struct{}
-
-func (a *startCvdCommand) exec(cvdCLI *cvd.CLI, sel cvd.Selector) error {
-	return cvdCLI.Start(sel, cvd.StartOptions{})
-}
-
-type stopCvdCommand struct{}
-
-func (a *stopCvdCommand) exec(cvd *cvd.CLI, sel cvd.Selector) error {
-	return cvd.Stop(sel)
-}
-
-type removeCvdCommand struct{}
-
-func (a *removeCvdCommand) exec(cvd *cvd.CLI, sel cvd.Selector) error {
-	return cvd.Remove(sel)
-}
-
-type powerwashCvdCommand struct{}
-
-func (a *powerwashCvdCommand) exec(cvd *cvd.CLI, sel cvd.Selector) error {
-	return cvd.PowerWash(sel)
-}
-
-type powerbtnCvdCommand struct{}
-
-func (a *powerbtnCvdCommand) exec(cvd *cvd.CLI, sel cvd.Selector) error {
-	return cvd.PowerBtn(sel)
-}
-
 type ExecCVDCommandActionOpts struct {
-	Command          execCvdCommand
-	Selector         cvd.Selector
+	Command          string
+	Selector         CVDSelector
 	Paths            IMPaths
 	OperationManager OperationManager
-	ExecContext      exec.ExecContext
-	CVDUser          *user.User
+	ExecContext      ExecContext
+	CVDUser          string
 }
 
 type ExecCVDCommandAction struct {
-	command  execCvdCommand
-	selector cvd.Selector
-	paths    IMPaths
-	om       OperationManager
-	cvdCLI   *cvd.CLI
+	command     string
+	selector    CVDSelector
+	paths       IMPaths
+	om          OperationManager
+	execContext cvd.CVDExecContext
 }
 
 func NewExecCVDCommandAction(opts ExecCVDCommandActionOpts) *ExecCVDCommandAction {
 	return &ExecCVDCommandAction{
-		command:  opts.Command,
-		selector: opts.Selector,
-		paths:    opts.Paths,
-		om:       opts.OperationManager,
-		cvdCLI:   cvd.NewCLI(exec.NewAsUserExecContext(opts.ExecContext, opts.CVDUser)),
+		command:     opts.Command,
+		selector:    opts.Selector,
+		paths:       opts.Paths,
+		om:          opts.OperationManager,
+		execContext: newCVDExecContext(opts.ExecContext, opts.CVDUser),
 	}
 }
 
@@ -88,11 +53,20 @@ func (a *ExecCVDCommandAction) Run() (apiv1.Operation, error) {
 	op := a.om.New()
 	go func(op apiv1.Operation) {
 		result := &OperationResult{}
-		result.Value = &apiv1.EmptyResponse{}
-		result.Error = a.command.exec(a.cvdCLI, a.selector)
+		result.Value, result.Error = a.exec(op)
 		if err := a.om.Complete(op.Name, result); err != nil {
 			log.Printf("error completing operation %q: %v\n", op.Name, err)
 		}
 	}(op)
 	return op, nil
+}
+
+func (a *ExecCVDCommandAction) exec(op apiv1.Operation) (*apiv1.EmptyResponse, error) {
+	args := a.selector.ToCVDCLI()
+	args = append(args, a.command)
+	cmd := cvd.NewCommand(a.execContext, args, cvd.CommandOpts{})
+	if err := cmd.Run(); err != nil {
+		return nil, operator.NewInternalError("cvd "+a.command+" failed", err)
+	}
+	return &apiv1.EmptyResponse{}, nil
 }

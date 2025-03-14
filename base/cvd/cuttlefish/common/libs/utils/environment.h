@@ -15,14 +15,25 @@
  */
 #pragma once
 
-#include <optional>
 #include <string>
 
 namespace cuttlefish {
 
-std::optional<std::string> StringFromEnv(const std::string& varname);
+enum class Arch {
+  Arm,
+  Arm64,
+  RiscV64,
+  X86,
+  X86_64,
+};
 
 std::string StringFromEnv(const std::string& varname,
                           const std::string& defval);
+
+std::string HostArchStr();
+Arch HostArch();
+bool IsHostCompatible(Arch arch);
+
+bool IsRunningInContainer();
 
 }  // namespace cuttlefish

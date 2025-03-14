@@ -18,8 +18,8 @@ import (
 	"errors"
 	"testing"
 
-	apiv1 "github.com/google/android-cuttlefish/frontend/src/host_orchestrator/api/v1"
 	orchtesting "github.com/google/android-cuttlefish/frontend/src/host_orchestrator/orchestrator/testing"
+	apiv1 "github.com/google/android-cuttlefish/frontend/src/liboperator/api/v1"
 	"github.com/google/android-cuttlefish/frontend/src/liboperator/operator"
 )
 
@@ -49,6 +49,7 @@ func TestCreateCVDInvalidRequestsEmptyFields(t *testing.T) {
 		{func(r *apiv1.CreateCVDRequest) { r.CVD.BuildSource.AndroidCIBuildSource = nil }},
 		{func(r *apiv1.CreateCVDRequest) {
 			r.CVD.BuildSource.AndroidCIBuildSource = nil
+			r.CVD.BuildSource.UserBuildSource = &apiv1.UserBuildSource{ArtifactsDir: ""}
 		}},
 	}
 	for _, test := range tests {
@@ -90,6 +91,7 @@ func TestCreateCVDFailsDueInvalidHost(t *testing.T) {
 		Paths:            paths,
 		OperationManager: om,
 		ExecContext:      execContext,
+		CVDUser:          fakeCVDUser,
 	}
 	action := NewCreateCVDAction(opts)
 

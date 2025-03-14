@@ -17,6 +17,7 @@ package orchestrator
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net"
@@ -24,15 +25,18 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
+	"strings"
 
-	apiv1 "github.com/google/android-cuttlefish/frontend/src/host_orchestrator/api/v1"
 	"github.com/google/android-cuttlefish/frontend/src/host_orchestrator/orchestrator/artifacts"
 	"github.com/google/android-cuttlefish/frontend/src/host_orchestrator/orchestrator/cvd"
-	hoexec "github.com/google/android-cuttlefish/frontend/src/host_orchestrator/orchestrator/exec"
+	apiv1 "github.com/google/android-cuttlefish/frontend/src/liboperator/api/v1"
 	"github.com/google/android-cuttlefish/frontend/src/liboperator/operator"
 
 	"github.com/hashicorp/go-multierror"
 )
+
+type ExecContext = func(ctx context.Context, name string, arg ...string) *exec.Cmd
 
 type Validator interface {
 	Validate() error
@@ -52,64 +56,144 @@ type AndroidBuild struct {
 type IMPaths struct {
 	RootDir          string
 	ArtifactsRootDir string
-	CVDBugReportsDir string
-	SnapshotsRootDir string
 }
 
-func CvdGroupToAPIObject(group *cvd.Group) []*apiv1.CVD {
-	result := make([]*apiv1.CVD, len(group.Instances))
-	for i, item := range group.Instances {
-		result[i] = CvdInstanceToAPIObject(item, group.Name)
+type CVDSelector struct {
+	Group string
+	Name  string
+}
+
+func (s *CVDSelector) ToCVDCLI() []string {
+	res := []string{}
+	if s.Group != "" {
+		res = append(res, "--group_name="+s.Group)
+	}
+	if s.Name != "" {
+		res = append(res, "--instance_name="+s.Name)
+	}
+	return res
+}
+
+// Creates a CVD execution context from a regular execution context.
+// If a non-empty user name is provided the returned execution context executes commands as that user.
+func newCVDExecContext(execContext ExecContext, user string) cvd.CVDExecContext {
+	if user != "" {
+		return func(ctx context.Context, env []string, name string, arg ...string) *exec.Cmd {
+			newArgs := []string{"-u", user}
+			if env != nil {
+				newArgs = append(newArgs, env...)
+			}
+			newArgs = append(newArgs, name)
+			newArgs = append(newArgs, arg...)
+			return execContext(ctx, "sudo", newArgs...)
+		}
+	}
+	return func(ctx context.Context, env []string, name string, arg ...string) *exec.Cmd {
+		cmd := execContext(ctx, name, arg...)
+		if cmd != nil {
+			cmd.Env = env
+		}
+		return cmd
+	}
+}
+
+// Makes runtime artifacts owned by `cvdnetwork` group.
+func createRuntimesRootDir(name string) error {
+	if err := createDir(name); err != nil {
+		return err
+	}
+	return os.Chmod(name, 0774|os.ModeSetgid)
+}
+
+type cvdFleetOutput struct {
+	Groups []*cvdGroup `json:"groups"`
+}
+
+type cvdGroup struct {
+	Name      string         `json:"group_name"`
+	Instances []*cvdInstance `json:"instances"`
+}
+
+func (g *cvdGroup) toAPIObject() []*apiv1.CVD {
+	result := make([]*apiv1.CVD, len(g.Instances))
+	for i, item := range g.Instances {
+		result[i] = item.toAPIObject(g.Name)
 	}
 	return result
 }
 
-func CvdInstanceToAPIObject(instance *cvd.Instance, group string) *apiv1.CVD {
+type cvdInstance struct {
+	InstanceName   string   `json:"instance_name"`
+	Status         string   `json:"status"`
+	Displays       []string `json:"displays"`
+	InstanceDir    string   `json:"instance_dir"`
+	WebRTCDeviceID string   `json:"webrtc_device_id"`
+	ADBSerial      string   `json:"adb_serial"`
+}
+
+func (i *cvdInstance) toAPIObject(group string) *apiv1.CVD {
 	return &apiv1.CVD{
 		Group: group,
-		Name:  instance.InstanceName,
+		Name:  i.InstanceName,
 		// TODO(b/259725479): Update when `cvd fleet` prints out build information.
 		BuildSource:    &apiv1.BuildSource{},
-		Status:         instance.Status,
-		Displays:       instance.Displays,
-		WebRTCDeviceID: instance.WebRTCDeviceID,
-		ADBSerial:      instance.ADBSerial,
+		Status:         i.Status,
+		Displays:       i.Displays,
+		WebRTCDeviceID: i.WebRTCDeviceID,
+		ADBSerial:      i.ADBSerial,
 	}
 }
 
-func findGroup(fleet *cvd.Fleet, name string) (bool, *cvd.Group) {
-	for _, e := range fleet.Groups {
-		if e.Name == name {
-			return true, e
-		}
+func cvdFleet(ctx cvd.CVDExecContext) (*cvdFleetOutput, error) {
+	stdout := &bytes.Buffer{}
+	cvdCmd := cvd.NewCommand(ctx, []string{"fleet"}, cvd.CommandOpts{Stdout: stdout})
+	err := cvdCmd.Run()
+	if err != nil {
+		return nil, err
 	}
-	return false, nil
+	output := &cvdFleetOutput{}
+	if err := json.Unmarshal(stdout.Bytes(), output); err != nil {
+		log.Printf("Failed parsing `cvd fleet` output. Output: \n\n%s\n", cvd.OutputLogMessage(stdout.String()))
+		return nil, fmt.Errorf("failed parsing `cvd fleet` output: %w", err)
+	}
+	return output, nil
 }
 
-func findInstance(group *cvd.Group, name string) (bool, *cvd.Instance) {
-	for _, e := range group.Instances {
-		if e.InstanceName == name {
-			return true, e
-		}
+// Helper for listing first group instances only. Legacy flows didn't have a multi-group environment hence using
+// the first group only.
+func cvdFleetFirstGroup(ctx cvd.CVDExecContext) (*cvdGroup, error) {
+	fleet, err := cvdFleet(ctx)
+	if err != nil {
+		return nil, err
 	}
-	return false, &cvd.Instance{}
+	if len(fleet.Groups) == 0 {
+		return &cvdGroup{}, nil
+	}
+	return fleet.Groups[0], nil
 }
 
-func CVDLogsDir(ctx hoexec.ExecContext, groupName, name string) (string, error) {
-	cvdCLI := cvd.NewCLI(ctx)
-	fleet, err := cvdCLI.Fleet()
+func CVDLogsDir(ctx cvd.CVDExecContext, name string) (string, error) {
+	group, err := cvdFleetFirstGroup(ctx)
 	if err != nil {
 		return "", err
 	}
-	ok, group := findGroup(fleet, groupName)
-	if !ok {
-		return "", operator.NewNotFoundError(fmt.Sprintf("Group %q not found", groupName), nil)
-	}
-	ok, ins := findInstance(group, name)
+	ok, ins := cvdInstances(group.Instances).findByName(name)
 	if !ok {
 		return "", operator.NewNotFoundError(fmt.Sprintf("Instance %q not found", name), nil)
 	}
 	return ins.InstanceDir + "/logs", nil
+}
+
+func HostBugReport(ctx cvd.CVDExecContext, paths IMPaths, out string) error {
+	group, err := cvdFleetFirstGroup(ctx)
+	if err != nil {
+		return err
+	}
+	if len(group.Instances) == 0 {
+		return operator.NewNotFoundError("no artifacts found", nil)
+	}
+	cmd := cvd.NewCommand(ctx, []string{"host_bugreport", "--output=" + out}, cvd.CommandOpts{})
+	return cmd.Run()
 }
 
 const (
@@ -123,44 +207,76 @@ func defaultMainBuild() *apiv1.AndroidCIBuild {
 }
 
 type fetchCVDCommandArtifactsFetcher struct {
-	execContext         hoexec.ExecContext
-	buildAPICredentials BuildAPICredentials
+	execContext cvd.CVDExecContext
+	credentials string
 }
 
-func newFetchCVDCommandArtifactsFetcher(execContext hoexec.ExecContext, buildAPICredentials BuildAPICredentials) *fetchCVDCommandArtifactsFetcher {
+func newFetchCVDCommandArtifactsFetcher(execContext cvd.CVDExecContext, credentials string) *fetchCVDCommandArtifactsFetcher {
 	return &fetchCVDCommandArtifactsFetcher{
-		execContext:         execContext,
-		buildAPICredentials: buildAPICredentials,
+		execContext: execContext,
+		credentials: credentials,
 	}
 }
 
 // The artifacts directory gets created during the execution of `fetch_cvd` granting access to the cvdnetwork group
 // which translated to granting the necessary permissions to the cvd executor user.
 func (f *fetchCVDCommandArtifactsFetcher) Fetch(outDir, buildID, target string, extraOptions *artifacts.ExtraCVDOptions) error {
-	cvdCLI := cvd.NewCLI(f.execContext)
-
-	var creds cvd.FetchCredentials
-	if f.buildAPICredentials.AccessToken != "" {
-		creds = &cvd.FetchTokenFileCredentials{
-			AccessToken: f.buildAPICredentials.AccessToken,
-			ProjectId:   f.buildAPICredentials.UserProjectID,
+	args := []string{
+		fmt.Sprintf("--directory=%s", outDir),
+		fmt.Sprintf("--default_build=%s/%s", buildID, target),
+	}
+	if extraOptions != nil {
+		args = append(args,
+			fmt.Sprintf("--system_build=%s/%s", extraOptions.SystemImgBuildID, extraOptions.SystemImgTarget))
+	}
+	var file *os.File
+	var err error
+	fetchCmd := f.execContext(context.TODO(), []string{}, cvd.FetchCVDBin, args...)
+	if f.credentials != "" {
+		if file, err = createCredentialsFile(f.credentials); err != nil {
+			return err
 		}
+		defer file.Close()
+		// This is necessary for the subprocess to inherit the file.
+		fetchCmd.ExtraFiles = append(fetchCmd.ExtraFiles, file)
+		// The actual fd number is not retained, the lowest available number is used instead.
+		fd := 3 + len(fetchCmd.ExtraFiles) - 1
+		fetchCmd.Args = append(fetchCmd.Args, fmt.Sprintf("--credential_source=/proc/self/fd/%d", fd))
 	} else if isRunningOnGCE() {
 		if ok, err := hasServiceAccountAccessToken(); err != nil {
 			log.Printf("service account token check failed: %s", err)
 		} else if ok {
-			creds = &cvd.FetchGceCredentials{}
+			fetchCmd.Args = append(fetchCmd.Args, "--credential_source=gce")
 		}
 	}
-	opts := cvd.FetchOpts{
-		DefaultBuildID:     buildID,
-		DefaultBuildTarget: target,
+	out, err := fetchCmd.CombinedOutput()
+	if err != nil {
+		cvd.LogCombinedStdoutStderr(fetchCmd, string(out))
+		return fmt.Errorf("`fetch_cvd` failed: %w. \n\nCombined Output:\n%s", err, string(out))
 	}
-	if extraOptions != nil {
-		opts.SystemImageBuildID = extraOptions.SystemImgBuildID
-		opts.SystemImageBuildTarget = extraOptions.SystemImgTarget
+	// TODO(b/286466643): Remove this hack once cuttlefish is capable of booting from read-only artifacts again.
+	chmodCmd := f.execContext(context.TODO(), []string{}, "chmod", "-R", "g+rw", outDir)
+	chmodOut, err := chmodCmd.CombinedOutput()
+	if err != nil {
+		cvd.LogCombinedStdoutStderr(chmodCmd, string(chmodOut))
+		return err
 	}
-	return cvdCLI.Fetch(opts, creds, outDir)
+	return nil
+}
+
+func createCredentialsFile(content string) (*os.File, error) {
+	p1, p2, err := os.Pipe()
+	if err != nil {
+		return nil, fmt.Errorf("Failed to create pipe for credentials: %w", err)
+	}
+	go func(f *os.File) {
+		defer f.Close()
+		if _, err := f.Write([]byte(content)); err != nil {
+			log.Printf("Failed to write credentials to file: %v\n", err)
+			// Can't return this error without risking a deadlock when the pipe buffer fills up.
+		}
+	}(p2)
+	return p1, nil
 }
 
 type buildAPIArtifactsFetcher struct {
@@ -196,10 +312,15 @@ func (f *buildAPIArtifactsFetcher) Fetch(outDir, buildID, target string, artifac
 }
 
 const (
+	daemonArg = "--daemon"
 	// TODO(b/242599859): Add report_anonymous_usage_stats as a parameter to the Create CVD API.
-	reportAnonymousUsageStats = true
-	groupName                 = "cvd"
+	reportAnonymousUsageStatsArg = "--report_anonymous_usage_stats=y"
+	groupNameArg                 = "--group_name=cvd"
 )
+
+type startCVDHandler struct {
+	ExecContext cvd.CVDExecContext
+}
 
 type startCVDParams struct {
 	InstanceNumbers  []uint32
@@ -211,35 +332,38 @@ type startCVDParams struct {
 	BootloaderDir string
 }
 
-func CreateCVD(ctx hoexec.ExecContext, p startCVDParams) (*cvd.Group, error) {
-	createOpts := cvd.CreateOptions{
-		HostPath:    p.MainArtifactsDir,
-		ProductPath: p.MainArtifactsDir,
+func (h *startCVDHandler) Start(p startCVDParams) error {
+	args := []string{groupNameArg, "start", daemonArg, reportAnonymousUsageStatsArg}
+	if len(p.InstanceNumbers) == 1 {
+		// Use legacy `--base_instance_num` when multi-vd is not requested.
+		args = append(args, fmt.Sprintf("--base_instance_num=%d", p.InstanceNumbers[0]))
+	} else {
+		args = append(args, fmt.Sprintf("--instance_nums=%s", strings.Join(SliceItoa(p.InstanceNumbers), ",")))
 	}
+	args = append(args, fmt.Sprintf("--system_image_dir=%s", p.MainArtifactsDir))
 	if len(p.InstanceNumbers) > 1 {
-		createOpts.InstanceNums = p.InstanceNumbers
-	}
-
-	startOpts := cvd.StartOptions{
-		ReportUsageStats: reportAnonymousUsageStats,
+		args = append(args, fmt.Sprintf("--num_instances=%d", len(p.InstanceNumbers)))
 	}
 	if p.KernelDir != "" {
-		startOpts.KernelImage = fmt.Sprintf("%s/bzImage", p.KernelDir)
+		args = append(args, fmt.Sprintf("--kernel_path=%s/bzImage", p.KernelDir))
 		initramfs := filepath.Join(p.KernelDir, "initramfs.img")
 		if exist, _ := fileExist(initramfs); exist {
-			startOpts.InitramfsImage = initramfs
+			args = append(args, "--initramfs_path="+initramfs)
 		}
 	}
 	if p.BootloaderDir != "" {
-		startOpts.BootloaderRom = fmt.Sprintf("%s/u-boot.rom", p.BootloaderDir)
+		args = append(args, fmt.Sprintf("--bootloader=%s/u-boot.rom", p.BootloaderDir))
 	}
-
-	cvdCLI := cvd.NewCLI(ctx)
-	group, err := cvdCLI.Create(cvd.Selector{Group: groupName}, createOpts, startOpts)
+	opts := cvd.CommandOpts{
+		AndroidHostOut: p.MainArtifactsDir,
+		Home:           p.RuntimeDir,
+	}
+	cvdCmd := cvd.NewCommand(h.ExecContext, args, opts)
+	err := cvdCmd.Run()
 	if err != nil {
-		return nil, fmt.Errorf("launch cvd stage failed: %w", err)
+		return fmt.Errorf("launch cvd stage failed: %w", err)
 	}
-	return group, nil
+	return nil
 }
 
 // Fails if the directory already exists.
@@ -272,7 +396,7 @@ func fileExist(name string) (bool, error) {
 
 // Validates whether the current host is valid to run CVDs.
 type HostValidator struct {
-	ExecContext hoexec.ExecContext
+	ExecContext ExecContext
 }
 
 func (v *HostValidator) Validate() error {
@@ -344,7 +468,18 @@ func downloadArtifactToFile(buildAPI artifacts.BuildAPI, filename, artifactName,
 	return downloadErr
 }
 
-func runAcloudSetup(execContext hoexec.ExecContext, artifactsRootDir, artifactsDir string) {
+type cvdInstances []*cvdInstance
+
+func (s cvdInstances) findByName(name string) (bool, *cvdInstance) {
+	for _, e := range s {
+		if e.InstanceName == name {
+			return true, e
+		}
+	}
+	return false, &cvdInstance{}
+}
+
+func runAcloudSetup(execContext cvd.CVDExecContext, artifactsRootDir, artifactsDir string) {
 	run := func(cmd *exec.Cmd) {
 		var b bytes.Buffer
 		cmd.Stdout = &b
@@ -355,7 +490,15 @@ func runAcloudSetup(execContext hoexec.ExecContext, artifactsRootDir, artifactsD
 		}
 	}
 	// Creates symbolic link `acloud_link` which points to the passed device artifacts directory.
-	go run(execContext(context.TODO(), "ln", "-s", artifactsDir, artifactsRootDir+"/acloud_link"))
+	go run(execContext(context.TODO(), nil, "ln", "-s", artifactsDir, artifactsRootDir+"/acloud_link"))
+}
+
+func SliceItoa(s []uint32) []string {
+	result := make([]string, len(s))
+	for i, v := range s {
+		result[i] = strconv.Itoa(int(v))
+	}
+	return result
 }
 
 func contains(s []uint32, e uint32) bool {

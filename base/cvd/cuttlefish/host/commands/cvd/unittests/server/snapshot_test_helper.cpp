@@ -19,7 +19,7 @@
 
 #include "host/commands/cvd/unittests/server/cmd_runner.h"
 
-#include "host/commands/cvd/cli/types.h"
+#include "host/commands/cvd/types.h"
 
 namespace cuttlefish {
 namespace cvdsnapshot {

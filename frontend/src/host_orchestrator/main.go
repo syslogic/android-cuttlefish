@@ -18,7 +18,6 @@ package main
 import (
 	"flag"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
 	"net/http/httputil"
@@ -32,6 +31,8 @@ import (
 	"github.com/google/android-cuttlefish/frontend/src/host_orchestrator/orchestrator"
 	"github.com/google/android-cuttlefish/frontend/src/host_orchestrator/orchestrator/debug"
 	"github.com/gorilla/mux"
+
+	"github.com/google/uuid"
 )
 
 const (
@@ -52,6 +53,25 @@ func startHttpServer(addr string, port int) error {
 
 	// handler is nil, so DefaultServeMux is used.
 	return http.ListenAndServe(fmt.Sprintf("%s:%d", addr, port), nil)
+}
+
+func startHttpsServer(addr string, port int, certPath string, keyPath string) error {
+	log.Printf("Host Orchestrator is listening at https://%s:%d", addr, port)
+	return http.ListenAndServeTLS(fmt.Sprintf("%s:%d", addr, port),
+		certPath,
+		keyPath,
+		// handler is nil, so DefaultServeMux is used.
+		//
+		// Using DefaultServerMux in both servers (http and https) is not a problem
+		// as http.ServeMux instances are thread safe.
+		nil)
+}
+
+func fromEnvOrDefault(key string, def string) string {
+	if val, ok := os.LookupEnv(key); ok {
+		return val
+	}
+	return def
 }
 
 func start(starters []func() error) {
@@ -76,35 +96,18 @@ func newOperatorProxy(port int) *httputil.ReverseProxy {
 	if err != nil {
 		log.Fatalf("Invalid operator port (%d): %v", port, err)
 	}
-	proxy := httputil.NewSingleHostReverseProxy(operatorURL)
-	proxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
-		log.Printf("request %q failed: proxy error: %v", r.Method+" "+r.URL.Path, err)
-		w.Header().Add("x-cutf-proxy", "ho-operator")
-		w.WriteHeader(http.StatusBadGateway)
-	}
-	return proxy
+	return httputil.NewSingleHostReverseProxy(operatorURL)
 }
 
 func main() {
 	httpPort := flag.Int("http_port", 2080, "Port to listen on for HTTP requests.")
-	cvdUsername := flag.String("cvd_user", "", "User to execute cvd as.")
+	cvdUser := flag.String("cvd_user", "", "User to execute cvd as.")
 	operatorPort := flag.Int("operator_http_port", 1080, "Port where the operator is listening.")
 	abURL := flag.String("android_build_url", defaultAndroidBuildURL, "URL to an Android Build API.")
 	imRootDir := flag.String("cvd_artifacts_dir", defaultCVDArtifactsDir(), "Directory where cvd will download android build artifacts to.")
 	address := flag.String("listen_addr", DefaultListenAddress, "IP address to listen for requests.")
-	logFile := flag.String("log_file", "", "Path to file to write logs to.")
 
 	flag.Parse()
-
-	if *logFile != "" {
-		f, err := os.OpenFile(*logFile, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
-		if err != nil {
-			log.Fatalf("error opening log file %q: %v", *logFile, err)
-		}
-		defer f.Close()
-		w := io.MultiWriter(os.Stderr, f)
-		log.SetOutput(w)
-	}
 
 	if err := os.MkdirAll(*imRootDir, 0774); err != nil {
 		log.Fatalf("Unable to create artifacts directory: %v", err)
@@ -113,22 +116,11 @@ func main() {
 	imPaths := orchestrator.IMPaths{
 		RootDir:          *imRootDir,
 		ArtifactsRootDir: filepath.Join(*imRootDir, "artifacts"),
-		CVDBugReportsDir: filepath.Join(*imRootDir, "cvdbugreports"),
-		SnapshotsRootDir: filepath.Join(*imRootDir, "snapshots"),
-	}
-
-	var cvdUser *user.User
-	if *cvdUsername != "" {
-		var err error
-		cvdUser, err = user.Lookup(*cvdUsername)
-		if err != nil {
-			log.Fatalf("failed to get cvd user: %v", err)
-		}
 	}
 	om := orchestrator.NewMapOM()
 	uamOpts := orchestrator.UserArtifactsManagerOpts{
-		RootDir: filepath.Join(*imRootDir, "user_artifacts"),
-		Owner:   cvdUser,
+		RootDir:     filepath.Join(*imRootDir, "user_artifacts"),
+		NameFactory: func() string { return uuid.New().String() },
 	}
 	uam := orchestrator.NewUserArtifactsManagerImpl(uamOpts)
 	debugStaticVars := debug.StaticVariables{}
@@ -137,7 +129,7 @@ func main() {
 		Config: orchestrator.Config{
 			Paths:                  imPaths,
 			AndroidBuildServiceURL: *abURL,
-			CVDUser:                cvdUser,
+			CVDUser:                *cvdUser,
 		},
 		OperationManager:      om,
 		WaitOperationDuration: 2 * time.Minute,

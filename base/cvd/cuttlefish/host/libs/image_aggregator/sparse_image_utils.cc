@@ -24,6 +24,7 @@
 #include <fstream>
 
 #include "common/libs/fs/shared_fd.h"
+#include "common/libs/fs/shared_select.h"
 #include "common/libs/utils/subprocess.h"
 #include "host/libs/config/cuttlefish_config.h"
 

@@ -1,9 +1,10 @@
 package(
-    default_visibility = ["//:android_cuttlefish"],
+    default_visibility = ["//visibility:public"],
 )
 
 cc_library(
-    name = "log_header",
-    hdrs = ["android/log.h"],
-    includes = [""],
+  name = "log_header",
+  hdrs = ["android/log.h"],
+  includes = [""],
 )
+

@@ -15,9 +15,13 @@
  */
 
 #include "common/libs/fs/shared_fd.h"
+#include "common/libs/fs/shared_select.h"
 
+#include <stdlib.h>
 #include <unistd.h>
 #include <gtest/gtest.h>
+
+#include <string>
 
 namespace cuttlefish {
 

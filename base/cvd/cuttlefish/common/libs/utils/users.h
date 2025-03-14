@@ -33,6 +33,4 @@ bool InGroup(const std::string& group);
  */
 Result<std::string> SystemWideUserHome();
 
-Result<std::string> CurrentUserName();
-
 }  // namespace cuttlefish

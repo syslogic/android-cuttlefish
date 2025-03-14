@@ -15,19 +15,18 @@
 package orchestrator
 
 import (
+	"archive/tar"
 	"archive/zip"
+	"compress/gzip"
 	"fmt"
 	"io"
 	"io/ioutil"
-	"log"
 	"os"
-	"os/exec"
-	"os/user"
 	"path/filepath"
 	"strings"
+	"syscall"
 
-	apiv1 "github.com/google/android-cuttlefish/frontend/src/host_orchestrator/api/v1"
-	hoexec "github.com/google/android-cuttlefish/frontend/src/host_orchestrator/orchestrator/exec"
+	apiv1 "github.com/google/android-cuttlefish/frontend/src/liboperator/api/v1"
 	"github.com/google/android-cuttlefish/frontend/src/liboperator/operator"
 )
 
@@ -62,8 +61,8 @@ type UserArtifactsManager interface {
 type UserArtifactsManagerOpts struct {
 	// The root directory where to store the artifacts.
 	RootDir string
-	// Artifact owner. If nil, the owner will be the process's owner.
-	Owner *user.User
+	// Factory of name values
+	NameFactory func() string
 }
 
 // An implementation of the UserArtifactsManager interface.
@@ -82,12 +81,11 @@ func (m *UserArtifactsManagerImpl) NewDir() (*apiv1.UploadDirectory, error) {
 	if err := createDir(m.RootDir); err != nil {
 		return nil, err
 	}
-	dir, err := createNewUADir(m.RootDir, m.Owner)
-	if err != nil {
+	name := m.NameFactory()
+	if err := createNewDir(m.RootDir + "/" + name); err != nil {
 		return nil, err
 	}
-	log.Println("created new user artifact directory", dir)
-	return &apiv1.UploadDirectory{Name: filepath.Base(dir)}, nil
+	return &apiv1.UploadDirectory{Name: name}, nil
 }
 
 func (m *UserArtifactsManagerImpl) ListDirs() (*apiv1.ListUploadDirectoriesResponse, error) {
@@ -126,18 +124,15 @@ func (m *UserArtifactsManagerImpl) UpdateArtifact(dir string, chunk UserArtifact
 	} else if !ok {
 		return operator.NewBadRequestError("upload directory %q does not exist", err)
 	}
-	filename := filepath.Join(dir, chunk.Name)
-	if err := createUAFile(filename, m.Owner); err != nil {
-		return err
-	}
-	if err := writeChunk(filename, chunk); err != nil {
+	if err := writeChunk(dir, chunk); err != nil {
 		return err
 	}
 	return nil
 }
 
-func writeChunk(filename string, chunk UserArtifactChunk) error {
-	f, err := os.OpenFile(filename, os.O_WRONLY, 0664)
+func writeChunk(dir string, chunk UserArtifactChunk) error {
+	filename := dir + "/" + chunk.Name
+	f, err := os.OpenFile(filename, os.O_WRONLY|os.O_CREATE, 0664)
 	if err != nil {
 		return err
 	}
@@ -148,7 +143,8 @@ func writeChunk(filename string, chunk UserArtifactChunk) error {
 	if _, err = io.Copy(f, chunk.File); err != nil {
 		return err
 	}
-	return nil
+	// Sets permission regardless of umask.
+	return os.Chmod(filename, 0664)
 }
 
 func (m *UserArtifactsManagerImpl) ExtractArtifact(dir, name string) error {
@@ -165,11 +161,11 @@ func (m *UserArtifactsManagerImpl) ExtractArtifact(dir, name string) error {
 		return operator.NewBadRequestError(fmt.Sprintf("artifact %q does not exist", name), nil)
 	}
 	if strings.HasSuffix(filename, ".tar.gz") {
-		if err := Untar(dir, filename, m.Owner); err != nil {
+		if err := Untar(dir, filename); err != nil {
 			return fmt.Errorf("failed extracting %q: %w", name, err)
 		}
 	} else if strings.HasSuffix(filename, ".zip") {
-		if err := Unzip(dir, filename, m.Owner); err != nil {
+		if err := Unzip(dir, filename); err != nil {
 			return fmt.Errorf("failed extracting %q: %w", name, err)
 		}
 	} else {
@@ -178,16 +174,58 @@ func (m *UserArtifactsManagerImpl) ExtractArtifact(dir, name string) error {
 	return nil
 }
 
-func Untar(dst string, src string, owner *user.User) error {
-	ctx := hoexec.NewAsUserExecContext(exec.CommandContext, owner)
-	_, err := hoexec.Exec(ctx, "tar", "-xf", src, "-C", dst)
+func Untar(dst string, src string) error {
+	r, err := os.Open(src)
 	if err != nil {
 		return err
 	}
-	return nil
+	defer r.Close()
+	gzr, err := gzip.NewReader(r)
+	if err != nil {
+		return err
+	}
+	defer gzr.Close()
+	tr := tar.NewReader(gzr)
+	for {
+		header, err := tr.Next()
+		if err == io.EOF {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		if header == nil {
+			continue
+		}
+		target := filepath.Join(dst, header.Name)
+		switch header.Typeflag {
+		case tar.TypeDir:
+			if _, err := os.Stat(target); err != nil {
+				oldmask := syscall.Umask(0)
+				err := os.MkdirAll(target, 0774)
+				syscall.Umask(oldmask)
+				if err != nil {
+					return err
+				}
+			}
+		case tar.TypeReg:
+			f, err := os.OpenFile(target, os.O_CREATE|os.O_RDWR, os.FileMode(header.Mode))
+			if err != nil {
+				return err
+			}
+			if _, err := io.Copy(f, tr); err != nil {
+				return err
+			}
+			f.Close()
+		case tar.TypeSymlink:
+			if err := os.Symlink(header.Linkname, target); err != nil {
+				return err
+			}
+		}
+	}
 }
 
-func Unzip(dstDir string, src string, owner *user.User) error {
+func Unzip(dstDir string, src string) error {
 	r, err := zip.OpenReader(src)
 	if err != nil {
 		return err
@@ -199,10 +237,7 @@ func Unzip(dstDir string, src string, owner *user.User) error {
 			return err
 		}
 		defer rc.Close()
-		if err := createUAFile(dst, owner); err != nil {
-			return err
-		}
-		dstFile, err := os.OpenFile(dst, os.O_WRONLY, 0664)
+		dstFile, err := os.OpenFile(dst, os.O_CREATE|os.O_RDWR, os.FileMode(src.Mode()))
 		if err != nil {
 			return err
 		}
@@ -221,33 +256,6 @@ func Unzip(dstDir string, src string, owner *user.User) error {
 		if err := extractTo(filepath.Join(dstDir, f.Name), f); err != nil {
 			return err
 		}
-	}
-	return nil
-}
-
-func createNewUADir(parent string, owner *user.User) (string, error) {
-	ctx := hoexec.NewAsUserExecContext(exec.CommandContext, owner)
-	stdout, err := hoexec.Exec(ctx, "mktemp", "--directory", "-p", parent)
-	if err != nil {
-		return "", err
-	}
-	name := strings.TrimRight(stdout, "\n")
-	// Sets permission regardless of umask.
-	if _, err := hoexec.Exec(ctx, "chmod", "u=rwx,g=rwx,o=r", name); err != nil {
-		return "", err
-	}
-	return name, nil
-}
-
-func createUAFile(filename string, owner *user.User) error {
-	ctx := hoexec.NewAsUserExecContext(exec.CommandContext, owner)
-	_, err := hoexec.Exec(ctx, "touch", filename)
-	if err != nil {
-		return err
-	}
-	// Sets permission regardless of umask.
-	if _, err := hoexec.Exec(ctx, "chmod", "u=rwx,g=rw,o=r", filename); err != nil {
-		return err
 	}
 	return nil
 }

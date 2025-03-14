@@ -1,5 +1,5 @@
 package(
-    default_visibility = ["//:android_cuttlefish"],
+    default_visibility = ["//visibility:public"],
 )
 
 # This file needs to change the signature of strerror_r exposed
@@ -19,8 +19,8 @@ cc_library(
     name = "libbase",
     srcs = [
         "file.cpp",
-        "include/logging_splitters.h",
         "logging.cpp",
+        "include/logging_splitters.h",
         "mapped_file.cpp",
         "parsebool.cpp",
         "stringprintf.cpp",
@@ -38,7 +38,6 @@ cc_library(
         "include/android-base/logging.h",
         "include/android-base/macros.h",
         "include/android-base/mapped_file.h",
-        "include/android-base/no_destructor.h",
         "include/android-base/off64_t.h",
         "include/android-base/parsebool.h",
         "include/android-base/parseint.h",
