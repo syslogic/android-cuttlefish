@@ -35,10 +35,51 @@ jobs:
     runs-on: ${{ INPUTS.RUNNER }}
     outputs:
       filename: ${{ steps.build-rpm-packages.outputs.filename }}
+      bazel-cache-id: ${{ steps.bazel-cache-hash.outputs.cache-id }}
+      go-cache-id: ${{ steps.go-cache-hash.outputs.cache-id }}
     env:
-      DOCKER_OPTIONS: '--name ${{ INPUTS.IMAGE }} --platform ${{ INPUTS.PLATFORM }} --volume ${{ GITHUB.WORKSPACE }}/.cache:/home/runner/.cache --volume ${{ GITHUB.WORKSPACE }}/.rpms:/home/runner/.rpms --attach STDERR --attach STDOUT --quiet'
+      DOCKER_OPTIONS: '--name ${{ INPUTS.IMAGE }} --platform ${{ INPUTS.PLATFORM }} --attach STDERR --attach STDOUT --quiet'
       DOCKER_IMAGE: ${{ INPUTS.REGISTRY }}/${{ INPUTS.USERNAME }}/${{ INPUTS.IMAGE }}:${{ INPUTS.TAG }}
+      DOCKER_MOUNTS: '--volume ${{ GITHUB.WORKSPACE }}/.rpms:/home/github/.rpms'
     steps:
+
+      # Hash base/cvd/*.bazel
+      - name: Emulate broken `hashFiles()` for ${{ GITHUB.WORKSPACE }}/base/cvd/*.bazel
+        if: ${{ contains(INPUTS.IMAGE, 'builder') }}
+        id: bazel-cache-hash
+        shell: bash
+        run: |
+          ls -la
+          echo cache-id=$(${{ GITHUB.WORKSPACE }}/docker/rpm-builder/scripts/hash.sh ${{ GITHUB.WORKSPACE }}/base/cvd/*.bazel)
+
+      # Hash .go/pkg/mod/cache/download/*
+      - name: Emulate broken `hashFiles()` for ${{ GITHUB.WORKSPACE }}/.go/pkg/mod/cache/download/*
+        if: ${{ contains(INPUTS.IMAGE, 'builder') }}
+        id: go-cache-hash
+        shell: bash
+        run: |
+          ls -la
+          echo cache-id=$(${{ GITHUB.WORKSPACE }}/docker/rpm-builder/scripts/hash.sh ${{ GITHUB.WORKSPACE }}/.go/pkg/mod/cache/download/*)
+
+      # https://github.com/actions/cache
+      - name: Restore build cache
+        if: ${{ contains(INPUTS.IMAGE, 'builder') }}
+        id: bazel-cache-restore
+        uses: 'actions/cache/restore@v4'
+        with:
+          key: bazel-cache-${{ RUNNER.ARCH }}-${{ steps.bazel-cache-hash.outputs.cache-id }}
+          restore-keys: build-cache-${{ RUNNER.ARCH }}-
+          path: ${{ GITHUB.WORKSPACE }}/.cache
+
+      # https://github.com/actions/cache
+      - name: Restore go downloads
+        if: ${{ contains(INPUTS.IMAGE, 'builder') }}
+        id: go-cache-restore
+        uses: 'actions/cache/restore@v4'
+        with:
+          key: go-cache-${{ RUNNER.ARCH }}-${{ steps.go-cache-hash.outputs.cache-id }}
+          restore-keys: go-packages-${{ RUNNER.ARCH }}-
+          path: ${{ GITHUB.WORKSPACE }}/.go
 
       # https://github.com/docker/login-action
       - name: Log in to the Container registry
@@ -49,16 +90,6 @@ jobs:
           username: ${{ INPUTS.USERNAME }}
           password: ${{ SECRETS.TOKEN }}
 
-      # https://github.com/actions/cache
-      - name: Restore build cache
-        if: ${{ contains(INPUTS.IMAGE, 'builder') }}
-        id: build-cache-restore
-        uses: 'actions/cache/restore@v4'
-        with:
-          key: build-cache-${{ RUNNER.ARCH }}-${{ hashFiles('/base/cvd/**.bazel') }}
-          # restore-keys: build-cache-${{ RUNNER.ARCH }}-
-          path: ${{ GITHUB.WORKSPACE }}/.cache
-
       # https://docs.docker.com/reference/cli/docker/container/run/
       # https://docs.docker.com/reference/cli/docker/container/cp/
       # --entrypoint ${{ INPUTS.ENTRY-POINT }} cannot be changed with GitHub docker.
@@ -66,10 +97,18 @@ jobs:
         if: ${{ contains(INPUTS.IMAGE, 'builder') }}
         id: build-rpm-packages
         shell: bash
+        env:
+          DOCKER_MOUNTS: '--volume ${{ GITHUB.WORKSPACE }}/.cache:/home/runner/.cache --volume ${{ GITHUB.WORKSPACE }}/.rpms:/home/runner/.rpms --volume ${{ GITHUB.WORKSPACE }}/.go:/home/runner/go/pkg/mod/cache/download'
         run: |
           mkdir -p ${{ GITHUB.WORKSPACE }}/.cache
           mkdir -p ${{ GITHUB.WORKSPACE }}/.rpms
-          docker run $DOCKER_OPTIONS $DOCKER_IMAGE
+          mkdir -p ${{ GITHUB.WORKSPACE }}/.go
+          
+          docker run $DOCKER_OPTIONS $DOCKER_MOUNTS $DOCKER_IMAGE
+
+          printf "\nUbuntu mount-point: %s\n" "${{ GITHUB.WORKSPACE }}/.rpms"
+          ls -la ${{ GITHUB.WORKSPACE }}/.rpms
+          ls -lan ${{ GITHUB.WORKSPACE }}/.rpms
 
       # https://github.com/actions/upload-artifact
       - name: Retain Artifacts (*.rpm)
@@ -82,26 +121,43 @@ jobs:
           retention-days: 14
 
       # https://github.com/actions/cache
-      - name: Save build cache
+      - name: Save bazel cache
         if: ${{ contains(INPUTS.IMAGE, 'builder') }}
-        id: build-cache-save
+        id: bazel-cache-save
         uses: 'actions/cache/save@v4'
         with:
           key: ${{ steps.build-cache-restore.outputs.cache-primary-key }}
           path: ${{ GITHUB.WORKSPACE }}/.cache
+
+      # https://github.com/actions/cache
+      - name: Save go downloads
+        if: ${{ contains(INPUTS.IMAGE, 'builder') }}
+        id: go-cache-save
+        uses: 'actions/cache/save@v4'
+        with:
+          key: ${{ steps.go-cache-restore.outputs.cache-primary-key }}
+          path: ${{ GITHUB.WORKSPACE }}/.go
 
       # https://docs.docker.com/reference/cli/docker/container/run/
       - name: Build integration image
         if: ${{ contains(INPUTS.IMAGE, 'integration') }}
         id: build-integration-image
         shell: bash
+        env:
+          DOCKER_MOUNTS: '--volume ${{ GITHUB.WORKSPACE }}/.rpms:/home/runner/.rpms'
         run: |
-          docker run $DOCKER_OPTIONS $DOCKER_IMAGE
+          mkdir -p ${{ GITHUB.WORKSPACE }}/.rpms
+          docker run $DOCKER_OPTIONS $DOCKER_MOUNTS $DOCKER_IMAGE
+          ls -la ${{ GITHUB.WORKSPACE }}/.rpms
 
       # https://docs.docker.com/reference/cli/docker/container/run/
       - name: Build orchestration image
         if: ${{ contains(INPUTS.DOCKER-IMAGE, 'orchestration') }}
         id: build-orchestration-image
         shell: bash
+        env:
+          DOCKER_MOUNTS: '--volume ${{ GITHUB.WORKSPACE }}/.rpms:/home/runner/.rpms'
         run: |
-          docker run $DOCKER_OPTIONS $DOCKER_IMAGE
+          mkdir -p ${{ GITHUB.WORKSPACE }}/.rpms
+          docker run $DOCKER_OPTIONS $DOCKER_MOUNTS $DOCKER_IMAGE
+          ls -la ${{ GITHUB.WORKSPACE }}/.rpms
