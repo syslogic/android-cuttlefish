@@ -34,9 +34,9 @@ ARG USER_UID=1001
 ARG USER_GID=1001
 ARG USER_NAME=runner
 
+# Adding the user upfront provides the required home directory `/home/runner`.
 RUN groupadd -g $USER_GID $USER_NAME
 RUN useradd -rm -d /home/$USER_NAME -s /bin/bash -g $USER_GID -u $USER_UID $USER_NAME
-RUN [ "touch", "/home/runner/.dockerfile" ]
 
 # https://docs.docker.com/reference/dockerfile/#notes-about-specifying-volumes
 # The host directory is declared at container run-time, with `--volume`, eg.
@@ -69,24 +69,25 @@ RUN [ "dnf", "clean", "all" ]
 RUN [ "go", "install", "github.com/bazelbuild/bazelisk@latest" ]
 RUN [ "mv", "/root/go", "/home/runner/go" ]
 
-# Modify file `~/.bash_profile`.
-RUN [ "echo", "export", "GOPATH=/home/runner/go", ">>", "/home/runner/.bash_profile", "&&", "echo", "export", "PATH=${PATH}:/home/runner/go/bin", ">>", "/home/runner/.bash_profile" ]
-RUN source /home/runner/.bash_profile
-
 # Add container scripts.
+RUN [ "touch", "/home/runner/.dockerfile" ]
 COPY [ "./docker/rpm-builder/scripts/build.sh", "/home/runner/build.sh" ]
 COPY [ "./docker/rpm-builder/scripts/clone.sh", "/home/runner/clone.sh" ]
-# COPY [ "./docker/rpm-builder/scripts/sign_rpm.sh", "/home/runner/sign_rpm.sh" ]
-# COPY [ "./docker/rpm-builder/scripts/sign_rpm.exp", "/usr/bin/sign_rpm.exp" ]
+COPY [ "./docker/rpm-builder/scripts/sign_rpm.sh", "/home/runner/sign_rpm.sh" ]
+COPY [ "./docker/rpm-builder/scripts/sign_rpm.exp", "/home/runner/sign_rpm.exp" ]
 COPY [ "./docker/rpm-builder/scripts/install_rpm.sh", "/home/runner/install_rpm.sh" ]
 COPY [ "./docker/rpm-builder/scripts/install_src.sh", "/home/runner/install_src.sh" ]
-RUN [ "chmod", "+x", "/home/runner/build.sh", "/home/runner/clone.sh" ]
-RUN [ "chown", "runner:runner", "/home/runner/build.sh" ]
-RUN [ "chown", "runner:runner", "/home/runner/clone.sh" ]
+RUN [ "chmod", "+x", "/home/runner/build.sh", "/home/runner/clone.sh", "/home/runner/sign_rpm.sh", "/home/runner/sign_rpm.exp" ]
+RUN [ "chmod", "+x", "/home/runner/install_rpm.sh", "/home/runner/install_src.sh" ]
 
-# Set user.
+RUN [ "chown", "-R", "runner:runner", "/home/runner" ]
+
+# Set up profile for `runner`.
 USER $USER_NAME
 
+RUN [ "echo", "export", "GOPATH=${HOME}/go", ">>", "~/.bash_profile" ]
+RUN [ "echo", "export", "PATH=${PATH}:${HOME}/go/bin", ">>", "~/.bash_profile" ]
+RUN source ~/.bash_profile
 
 # RPM Testing
 FROM builder AS testing
