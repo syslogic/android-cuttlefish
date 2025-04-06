@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # It will run DNF install.
-[ ! -f "${HOME}/.dockerfile" ] && echo ".dockerfile not present, exiting now." && exit
+[ ! -f "${HOME}/.dockerenv" ] && echo ".dockerenv not present, exiting now." && exit
 cd "${HOME}/.rpms" || echo "${HOME}/.rpms not found, exiting now." && exit
 
 PACKAGES=""

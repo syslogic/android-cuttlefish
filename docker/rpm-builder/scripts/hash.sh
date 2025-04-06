@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # It clones the repository, builds the packages and archives them.
-[ ! -f "${HOME}/.dockerfile" ] && echo ".dockerfile not present, exiting now." && exit
+[ ! -f "${HOME}/.dockerenv" ] && echo ".dockerenv not present, exiting now." && exit
 REPO_DIR="${HOME}/${REPO_NAME}"
 
 if [ $# -eq 1 ] && [ -f "${REPO_DIR}$1" ]; then

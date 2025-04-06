@@ -21,11 +21,11 @@ RUN [ "rm", "/root/.cshrc", "/root/.tcshrc" ]
 
 # Note: The container scripts are checking for this file,
 # in order to prevent accidentlly running them on the host.
-RUN [ "touch", "/root/.dockerfile" ]
+RUN [ "touch", "/root/.dockerenv" ]
 
 # Adding the user provides the home directory.
-RUN [ "groupadd", "-g", "118", "docker" ]
-RUN [ "useradd", "-g", "118", "-u", "1001", "-s", "/bin/bash", "runner" ]
+RUN [ "groupadd", "-g", "117", "docker" ]
+RUN [ "useradd", "-g", "117", "-u", "1001", "-s", "/bin/bash", "runner" ]
 RUN [ "mkdir", "-p", "/github/home" ]
 RUN [ "chown", "-R", "runner:docker", "/github" ]
 RUN [ "ln", "-s", "/github/home", "/home/runner" ]
@@ -41,11 +41,10 @@ ENV REPO_NAME="${REPO}"
 # https://docs.docker.com/reference/dockerfile/#notes-about-specifying-volumes
 # The host directory is declared at container run-time, with `--volume`, eg.
 # --volume /home/username/android-cuttlefish/.cache:/home/runner/.cache \
-# --volume /home/username/android-cuttlefish/.rpms/:/home/runner/.rpms \
-# --volume /home/username/android-cuttlefish/.go/:/home/runner/go/pkg/mod/cache/download
+# --volume /home/username/android-cuttlefish/.rpms/:/home/runner/.rpms
 WORKDIR "/home/runner"
-RUN [ "mkdir", "-p", "/home/runner/.cache", "/home/runner/.rpms", "/home/runner/go/pkg/mod/cache/download" ]
-VOLUME [ "/home/runner/.cache", "/home/runner/.rpms", "/home/runner/go/pkg/mod/cache/download" ]
+RUN [ "mkdir", "-p", "/home/runner/.cache", "/home/runner/.rpms" ]
+VOLUME [ "/home/runner/.cache", "/home/runner/.rpms" ]
 
 # The EPEL repository installs `dnf-core-plugin` (`config-manager` and `builddeps`) and provides `ncurses-compat-libs`.
 # Configuring further package repositories: / https://wiki.rockylinux.org/rocky/repo/#extra-repositories
@@ -77,12 +76,13 @@ COPY [ "./docker/rpm-builder/scripts/sign_rpm.sh", "/home/runner/sign_rpm.sh" ]
 COPY [ "./docker/rpm-builder/scripts/sign_rpm.exp", "/home/runner/sign_rpm.exp" ]
 COPY [ "./docker/rpm-builder/scripts/install_rpm.sh", "/home/runner/install_rpm.sh" ]
 COPY [ "./docker/rpm-builder/scripts/install_src.sh", "/home/runner/install_src.sh" ]
-RUN [ "touch", "/home/runner/.dockerfile" ]
+RUN [ "touch", "/home/runner/.dockerenv" ]
 RUN [ "mv", "/root/.bash_profile", "/home/runner/.bash_profile" ]
+RUN [ "echo", "%docker", "ALL=(ALL)", "NOPASSWD:", "ALL", ">>", "/etc/sudoers" ]
 RUN [ "echo", "export", "GOPATH=/home/runner/go", ">>", "/home/runner/.bash_profile" ]
 RUN [ "echo", "export", "PATH=$PATH:/home/runner/go/bin", ">>", "/home/runner/.bash_profile" ]
 RUN [ "chmod", "+x", "/home/runner/hash.sh", "/home/runner/build.sh", "/home/runner/clone.sh" ]
-RUN [ "chmod", "+x", "/home/runner/install_rpm.sh", "/home/runner/install_src.sh", "/home/runner/go/pkg/mod/cache/download" ]
+RUN [ "chmod", "+x", "/home/runner/install_rpm.sh", "/home/runner/install_src.sh" ]
 RUN [ "chmod", "+x", "/home/runner/sign_rpm.sh", "/home/runner/sign_rpm.exp" ]
 RUN [ "chown", "-R", "runner:docker", "/home/runner" ]
 

@@ -21,11 +21,11 @@ RUN [ "rm", "/root/.cshrc", "/root/.tcshrc" ]
 
 # Note: The container scripts are checking for this file,
 # in order to prevent accidentlly running them on the host.
-RUN [ "touch", "/root/.dockerfile" ]
+RUN [ "touch", "/root/.dockerenv" ]
 
 # Adding the user provides the home directory.
-RUN [ "groupadd", "-g", "118", "docker" ]
-RUN [ "useradd", "-g", "118", "-u", "1001", "-s", "/bin/bash", "runner" ]
+RUN [ "groupadd", "-g", "117", "docker" ]
+RUN [ "useradd", "-g", "117", "-u", "1001", "-s", "/bin/bash", "runner" ]
 RUN [ "mkdir", "-p", "/github/home" ]
 RUN [ "chown", "-R", "runner:docker", "/github" ]
 RUN [ "ln", "-s", "/github/home", "/home/runner" ]
@@ -68,6 +68,8 @@ EXPOSE 6520-6620
 # Add prebuilt RPM packages.
 # `./tools/rpmbuild/RPMS/x86_64` is only available on Linux.
 # However, the `builder` stage will move them to bind-mount.
+RUN [ "touch", "/home/runner/.dockerenv" ]
+RUN [ "echo", "%docker", "ALL=(ALL)", "NOPASSWD:", "ALL", ">>", "/etc/sudoers" ]
 COPY [ "./.rpms/cuttlefish-base-*", "/home/runner/.rpms/" ]
 COPY [ "./.rpms/cuttlefish-integration-*", "/home/runner/.rpms/" ]
 COPY [ "./.rpms/cuttlefish-user-*", "/home/runner/.rpms/" ]

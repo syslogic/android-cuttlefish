@@ -43,43 +43,16 @@ jobs:
       DOCKER_MOUNTS: '--volume ${{ GITHUB.WORKSPACE }}/.rpms:/home/github/.rpms'
     steps:
 
-      # Hash base/cvd/*.bazel
-      - name: Emulate broken `hashFiles()` for ${{ GITHUB.WORKSPACE }}/base/cvd/*.bazel
-        if: ${{ contains(INPUTS.IMAGE, 'builder') }}
-        id: bazel-cache-hash
-        shell: bash
-        run: |
-          ls -la
-          echo cache-id=$(${{ GITHUB.WORKSPACE }}/docker/rpm-builder/scripts/hash.sh ${{ GITHUB.WORKSPACE }}/base/cvd/*.bazel)
-
-      # Hash .go/pkg/mod/cache/download/*
-      - name: Emulate broken `hashFiles()` for ${{ GITHUB.WORKSPACE }}/.go/pkg/mod/cache/download/*
-        if: ${{ contains(INPUTS.IMAGE, 'builder') }}
-        id: go-cache-hash
-        shell: bash
-        run: |
-          ls -la
-          echo cache-id=$(${{ GITHUB.WORKSPACE }}/docker/rpm-builder/scripts/hash.sh ${{ GITHUB.WORKSPACE }}/.go/pkg/mod/cache/download/*)
-
-      # https://github.com/actions/cache
+      # need to check out, in order to generate file hashes.
+      - uses: 'actions/checkout@v4'
       - name: Restore build cache
         if: ${{ contains(INPUTS.IMAGE, 'builder') }}
         id: bazel-cache-restore
         uses: 'actions/cache/restore@v4'
         with:
-          key: bazel-cache-${{ RUNNER.ARCH }}-${{ steps.bazel-cache-hash.outputs.cache-id }}
-          restore-keys: build-cache-${{ RUNNER.ARCH }}-
+          key: bazel-cache-${{ RUNNER.ARCH }}-${{ hashFiles('./base/cvd/**.bazel') }}
+          restore-keys: bazel-cache-${{ RUNNER.ARCH }}-
           path: ${{ GITHUB.WORKSPACE }}/.cache
-
-      # https://github.com/actions/cache
-      - name: Restore go downloads
-        if: ${{ contains(INPUTS.IMAGE, 'builder') }}
-        id: go-cache-restore
-        uses: 'actions/cache/restore@v4'
-        with:
-          key: go-cache-${{ RUNNER.ARCH }}-${{ steps.go-cache-hash.outputs.cache-id }}
-          restore-keys: go-packages-${{ RUNNER.ARCH }}-
-          path: ${{ GITHUB.WORKSPACE }}/.go
 
       # https://github.com/docker/login-action
       - name: Log in to the Container registry
@@ -90,6 +63,19 @@ jobs:
           username: ${{ INPUTS.USERNAME }}
           password: ${{ SECRETS.TOKEN }}
 
+      - name: Build with logs
+        run: |
+          mkdir ${{ runner.temp }}/build_logs
+          echo "Logs from building" > ${{ runner.temp }}/build_logs/build.logs
+          exit 1
+
+      - name: Upload logs on fail
+        if: ${{ failure() }}
+        uses: 'actions/upload-artifact@v4'
+        with:
+          name: Build failure logs
+          path: ${{ runner.temp }}/build_logs
+
       # https://docs.docker.com/reference/cli/docker/container/run/
       # https://docs.docker.com/reference/cli/docker/container/cp/
       # --entrypoint ${{ INPUTS.ENTRY-POINT }} cannot be changed with GitHub docker.
@@ -98,25 +84,25 @@ jobs:
         id: build-rpm-packages
         shell: bash
         env:
-          DOCKER_MOUNTS: '--volume ${{ GITHUB.WORKSPACE }}/.cache:/home/runner/.cache --volume ${{ GITHUB.WORKSPACE }}/.rpms:/home/runner/.rpms --volume ${{ GITHUB.WORKSPACE }}/.go:/home/runner/go/pkg/mod/cache/download'
+          DOCKER_MOUNTS: '--volume ${{ GITHUB.WORKSPACE }}/.cache:/home/runner/.cache --volume ${{ GITHUB.WORKSPACE }}/.rpms:/home/runner/.rpms'
         run: |
           mkdir -p ${{ GITHUB.WORKSPACE }}/.cache
           mkdir -p ${{ GITHUB.WORKSPACE }}/.rpms
-          mkdir -p ${{ GITHUB.WORKSPACE }}/.go
           
           docker run $DOCKER_OPTIONS $DOCKER_MOUNTS $DOCKER_IMAGE
 
-          printf "\nUbuntu mount-point: %s\n" "${{ GITHUB.WORKSPACE }}/.rpms"
+          echo "ACTION_PATH: ${{ GITHUB.ACTION_PATH }}"
+          printf "Ubuntu mount-point: %s" "${{ GITHUB.WORKSPACE }}/.rpms"
           ls -la ${{ GITHUB.WORKSPACE }}/.rpms
           ls -lan ${{ GITHUB.WORKSPACE }}/.rpms
 
       # https://github.com/actions/upload-artifact
       - name: Retain Artifacts (*.rpm)
-        if: ${{ contains(INPUTS.IMAGE, 'builder') }}
+        if: ${{ contains(INPUTS.IMAGE, 'builder') && success() }}
         uses: 'actions/upload-artifact@v4'
         id: retain-rpm-packages
         with:
-          path: ${{ GITHUB.WORKSPACE }}/.rpms
+          path: '**/.rpms'
           name: android-cuttlefish-rhel9-${{ RUNNER.ARCH }}
           retention-days: 14
 
@@ -129,19 +115,10 @@ jobs:
           key: ${{ steps.build-cache-restore.outputs.cache-primary-key }}
           path: ${{ GITHUB.WORKSPACE }}/.cache
 
-      # https://github.com/actions/cache
-      - name: Save go downloads
-        if: ${{ contains(INPUTS.IMAGE, 'builder') }}
-        id: go-cache-save
-        uses: 'actions/cache/save@v4'
-        with:
-          key: ${{ steps.go-cache-restore.outputs.cache-primary-key }}
-          path: ${{ GITHUB.WORKSPACE }}/.go
-
       # https://docs.docker.com/reference/cli/docker/container/run/
       - name: Build integration image
         if: ${{ contains(INPUTS.IMAGE, 'integration') }}
-        id: build-integration-image
+        id: build-integration
         shell: bash
         env:
           DOCKER_MOUNTS: '--volume ${{ GITHUB.WORKSPACE }}/.rpms:/home/runner/.rpms'
@@ -153,7 +130,7 @@ jobs:
       # https://docs.docker.com/reference/cli/docker/container/run/
       - name: Build orchestration image
         if: ${{ contains(INPUTS.DOCKER-IMAGE, 'orchestration') }}
-        id: build-orchestration-image
+        id: build-orchestration
         shell: bash
         env:
           DOCKER_MOUNTS: '--volume ${{ GITHUB.WORKSPACE }}/.rpms:/home/runner/.rpms'

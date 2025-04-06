@@ -20,6 +20,7 @@ jobs:
 
     strategy:
       max-parallel: 2
+      fail-fast: true
       matrix:
         platform: [ linux/amd64, linux/arm64 ]
         include:
@@ -34,7 +35,6 @@ jobs:
 
     steps:
       - uses: 'actions/checkout@v4'
-
       - uses: 'docker/login-action@v3'
         id: container-registry
         with:
@@ -119,6 +119,7 @@ jobs:
       image: ${{ MATRIX.IMAGE }}
     strategy:
       max-parallel: 2
+      fail-fast: true
       matrix:
         platform: [ linux/amd64, linux/arm64 ]
         include:
@@ -145,6 +146,7 @@ jobs:
       image: ${{ MATRIX.IMAGE }}
     strategy:
       max-parallel: 2
+      fail-fast: true
       matrix:
         platform: [ linux/amd64, linux/arm64 ]
         include:

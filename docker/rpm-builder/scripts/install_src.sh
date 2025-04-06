@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # It will run build.sh or DNF install/remove.
-[ ! -f "${HOME}/.dockerfile" ] && echo ".dockerfile not present, exiting now." && exit
+[ ! -f "${HOME}/.dockerenv" ] && echo ".dockerenv not present, exiting now." && exit
 [ $# -eq 2 ] && REPO_USER=$1 && REPO_NAME=$2
 
 cd "$HOME" || exit
