@@ -43,17 +43,6 @@ jobs:
       DOCKER_MOUNTS: '--volume ${{ GITHUB.WORKSPACE }}/.rpms:/home/github/.rpms'
     steps:
 
-      # need to check out, in order to generate file hashes.
-      - uses: 'actions/checkout@v4'
-      - name: Restore build cache
-        if: ${{ contains(INPUTS.IMAGE, 'builder') }}
-        id: bazel-cache-restore
-        uses: 'actions/cache/restore@v4'
-        with:
-          key: bazel-cache-${{ RUNNER.ARCH }}-${{ hashFiles('./base/cvd/**.bazel') }}
-          restore-keys: bazel-cache-${{ RUNNER.ARCH }}-
-          path: ${{ GITHUB.WORKSPACE }}/.cache
-
       # https://github.com/docker/login-action
       - name: Log in to the Container registry
         uses: 'docker/login-action@v3'
@@ -63,18 +52,16 @@ jobs:
           username: ${{ INPUTS.USERNAME }}
           password: ${{ SECRETS.TOKEN }}
 
-      - name: Build with logs
-        run: |
-          mkdir ${{ runner.temp }}/build_logs
-          echo "Logs from building" > ${{ runner.temp }}/build_logs/build.logs
-          exit 1
-
-      - name: Upload logs on fail
-        if: ${{ failure() }}
-        uses: 'actions/upload-artifact@v4'
+      # Need to check out once again, in order to utilize `hashFiles()`.
+      - uses: 'actions/checkout@v4'
+      - name: Restore bazel cache
+        if: ${{ contains(INPUTS.IMAGE, 'builder') }}
+        id: bazel-cache-restore
+        uses: 'actions/cache/restore@v4'
         with:
-          name: Build failure logs
-          path: ${{ runner.temp }}/build_logs
+          key: bazel-cache-${{ RUNNER.ARCH }}-${{ hashFiles('./base/cvd/**.bazel') }}
+          restore-keys: bazel-cache-${{ RUNNER.ARCH }}-
+          path: ${{ RUNNER.TEMP }}/.cache
 
       # https://docs.docker.com/reference/cli/docker/container/run/
       # https://docs.docker.com/reference/cli/docker/container/cp/
@@ -84,17 +71,23 @@ jobs:
         id: build-rpm-packages
         shell: bash
         env:
-          DOCKER_MOUNTS: '--volume ${{ GITHUB.WORKSPACE }}/.cache:/home/runner/.cache --volume ${{ GITHUB.WORKSPACE }}/.rpms:/home/runner/.rpms'
+          DOCKER_MOUNTS: '--volume ${{ RUNNER.TEMP }}/.cache:/home/runner/.cache --volume ${{ RUNNER.TEMP }}/.rpms:/home/runner/.rpms'
         run: |
-          mkdir -p ${{ GITHUB.WORKSPACE }}/.cache
-          mkdir -p ${{ GITHUB.WORKSPACE }}/.rpms
-          
+          mkdir -p ${{ RUNNER.TEMP }}/.rpms
+          mkdir -p ${{ RUNNER.TEMP }}/.cache
           docker run $DOCKER_OPTIONS $DOCKER_MOUNTS $DOCKER_IMAGE
+          echo "Ubuntu mount-point: ${{ RUNNER.TEMP }}/.rpms"
+          ls -la ${{ RUNNER.TEMP }}/.rpms
+          ls -lan ${{ RUNNER.TEMP }}/.rpms
 
-          echo "ACTION_PATH: ${{ GITHUB.ACTION_PATH }}"
-          printf "Ubuntu mount-point: %s" "${{ GITHUB.WORKSPACE }}/.rpms"
-          ls -la ${{ GITHUB.WORKSPACE }}/.rpms
-          ls -lan ${{ GITHUB.WORKSPACE }}/.rpms
+      - name: List ${{ RUNNER.TEMP }}
+        if: ${{ contains(INPUTS.IMAGE, 'builder') }}
+        id: list-rpm-packages
+        shell: bash
+        run: |
+          printf "Ubuntu mount-point: %s" "${{ RUNNER.TEMP }}/.rpms"
+          ls -la ${{ RUNNER.TEMP }}/.rpms
+          ls -lan ${{ RUNNER.TEMP }}/.rpms
 
       # https://github.com/actions/upload-artifact
       - name: Retain Artifacts (*.rpm)
@@ -102,8 +95,8 @@ jobs:
         uses: 'actions/upload-artifact@v4'
         id: retain-rpm-packages
         with:
-          path: '**/.rpms'
           name: android-cuttlefish-rhel9-${{ RUNNER.ARCH }}
+          path: '${{ RUNNER.TEMP }}/.rpms/**'
           retention-days: 14
 
       # https://github.com/actions/cache
@@ -112,8 +105,8 @@ jobs:
         id: bazel-cache-save
         uses: 'actions/cache/save@v4'
         with:
-          key: ${{ steps.build-cache-restore.outputs.cache-primary-key }}
-          path: ${{ GITHUB.WORKSPACE }}/.cache
+          key: ${{ steps.bazel-cache-restore.outputs.cache-primary-key }}
+          path: ${{ RUNNER.TEMP }}/.cache
 
       # https://docs.docker.com/reference/cli/docker/container/run/
       - name: Build integration image
@@ -121,11 +114,10 @@ jobs:
         id: build-integration
         shell: bash
         env:
-          DOCKER_MOUNTS: '--volume ${{ GITHUB.WORKSPACE }}/.rpms:/home/runner/.rpms'
+          DOCKER_MOUNTS: '--volume ${{ RUNNER.TEMP }}/.rpms:/home/runner/.rpms'
         run: |
-          mkdir -p ${{ GITHUB.WORKSPACE }}/.rpms
+          mkdir -p ${{ RUNNER.TEMP }}/.rpms
           docker run $DOCKER_OPTIONS $DOCKER_MOUNTS $DOCKER_IMAGE
-          ls -la ${{ GITHUB.WORKSPACE }}/.rpms
 
       # https://docs.docker.com/reference/cli/docker/container/run/
       - name: Build orchestration image
@@ -133,8 +125,7 @@ jobs:
         id: build-orchestration
         shell: bash
         env:
-          DOCKER_MOUNTS: '--volume ${{ GITHUB.WORKSPACE }}/.rpms:/home/runner/.rpms'
+          DOCKER_MOUNTS: '--volume ${{ RUNNER.TEMP }}/.rpms:/home/runner/.rpms'
         run: |
-          mkdir -p ${{ GITHUB.WORKSPACE }}/.rpms
+          mkdir -p ${{ RUNNER.TEMP }}/.rpms
           docker run $DOCKER_OPTIONS $DOCKER_MOUNTS $DOCKER_IMAGE
-          ls -la ${{ GITHUB.WORKSPACE }}/.rpms

@@ -32,7 +32,7 @@ if [ -d "${SRC_DIR}/RPMS/aarch64" ]; then
   # tar -czf "${HOME}/.rpms/${REPO_NAME}-rpm.aarch64.tar.gz" "${SRC_DIR}/RPMS/aarch64"
 fi
 
-printf "\nRocky mount-point: %s\n" "${RPMS}"
+echo "nRocky mount-point: ${RPMS}"
 ls -la "${RPMS}"
 ls -lan "${RPMS}"
 

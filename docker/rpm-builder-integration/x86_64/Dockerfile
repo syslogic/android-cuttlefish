@@ -65,11 +65,10 @@ EXPOSE 15550-15560
 # Expose ADB
 EXPOSE 6520-6620
 
-# Add prebuilt RPM packages.
-# `./tools/rpmbuild/RPMS/x86_64` is only available on Linux.
-# However, the `builder` stage will move them to bind-mount.
 RUN [ "touch", "/home/runner/.dockerenv" ]
-RUN [ "echo", "%docker", "ALL=(ALL)", "NOPASSWD:", "ALL", ">>", "/etc/sudoers" ]
+RUN [ "echo", "%docker", "ALL=(ALL)", "NOPASSWD:", "ALL", ">", "/etc/sudoers.d/docker.conf" ]
+
+# Add prebuilt RPM packages.
 COPY [ "./.rpms/cuttlefish-base-*", "/home/runner/.rpms/" ]
 COPY [ "./.rpms/cuttlefish-integration-*", "/home/runner/.rpms/" ]
 COPY [ "./.rpms/cuttlefish-user-*", "/home/runner/.rpms/" ]
