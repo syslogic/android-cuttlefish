@@ -69,21 +69,20 @@ RUN [ "wget", "--no-verbose", "--output-document", "/usr/local/bin/bazel", "http
 RUN [ "chmod", "+x", "/usr/local/bin/bazel" ]
 
 # Container scripts.
-COPY [ "./docker/rpm-builder/scripts/hash.sh", "/home/runner/hash.sh" ]
+RUN [ "touch", "/home/runner/.dockerenv" ]
+RUN [ "cp", "/root/.bash_profile", "/home/runner/.bash_profile" ]
 COPY [ "./docker/rpm-builder/scripts/build.sh", "/home/runner/build.sh" ]
 COPY [ "./docker/rpm-builder/scripts/clone.sh", "/home/runner/clone.sh" ]
 COPY [ "./docker/rpm-builder/scripts/sign_rpm.sh", "/home/runner/sign_rpm.sh" ]
 COPY [ "./docker/rpm-builder/scripts/sign_rpm.exp", "/home/runner/sign_rpm.exp" ]
 COPY [ "./docker/rpm-builder/scripts/install_rpm.sh", "/home/runner/install_rpm.sh" ]
 COPY [ "./docker/rpm-builder/scripts/install_src.sh", "/home/runner/install_src.sh" ]
-RUN [ "cp", "/root/.bash_profile", "/home/runner/.bash_profile" ]
-RUN [ "touch", "/home/runner/.dockerenv" ]
 RUN [ "echo", "%docker", "ALL=(ALL)", "NOPASSWD:", "ALL", ">", "/etc/sudoers.d/docker.conf" ]
 RUN [ "echo", "export", "GOPATH=/home/runner/go", ">>", "/home/runner/.bash_profile" ]
 RUN [ "echo", "export", "PATH=$PATH:/home/runner/go/bin", ">>", "/home/runner/.bash_profile" ]
-RUN [ "chmod", "+x", "/home/runner/hash.sh", "/home/runner/build.sh", "/home/runner/clone.sh" ]
 RUN [ "chmod", "+x", "/home/runner/install_rpm.sh", "/home/runner/install_src.sh" ]
 RUN [ "chmod", "+x", "/home/runner/sign_rpm.sh", "/home/runner/sign_rpm.exp" ]
+RUN [ "chmod", "+x", "/home/runner/build.sh", "/home/runner/clone.sh" ]
 RUN [ "chown", "-R", "runner:docker", "/home/runner" ]
 
 # Run commands as by default as user $UID,

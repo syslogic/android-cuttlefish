@@ -33,10 +33,6 @@ jobs:
 
   docker-run:
     runs-on: ${{ INPUTS.RUNNER }}
-    outputs:
-      filename: ${{ steps.build-rpm-packages.outputs.filename }}
-      bazel-cache-id: ${{ steps.bazel-cache-hash.outputs.cache-id }}
-      go-cache-id: ${{ steps.go-cache-hash.outputs.cache-id }}
     env:
       DOCKER_OPTIONS: '--name ${{ INPUTS.IMAGE }} --platform ${{ INPUTS.PLATFORM }} --attach STDERR --attach STDOUT --quiet'
       DOCKER_IMAGE: ${{ INPUTS.REGISTRY }}/${{ INPUTS.USERNAME }}/${{ INPUTS.IMAGE }}:${{ INPUTS.TAG }}
@@ -76,9 +72,6 @@ jobs:
           mkdir -p ${{ RUNNER.TEMP }}/.rpms
           mkdir -p ${{ RUNNER.TEMP }}/.cache
           docker run $DOCKER_OPTIONS $DOCKER_MOUNTS $DOCKER_IMAGE
-          echo "Ubuntu mount-point: ${{ RUNNER.TEMP }}/.rpms"
-          ls -la ${{ RUNNER.TEMP }}/.rpms
-          ls -lan ${{ RUNNER.TEMP }}/.rpms
 
       - name: List ${{ RUNNER.TEMP }}
         if: ${{ contains(INPUTS.IMAGE, 'builder') }}
