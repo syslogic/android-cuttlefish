@@ -8,8 +8,9 @@ WORKDIR "/root"
 # Arguments
 # TODO: To be changed to `google` upon merging to `main` branch.
 # This is merely being used in `clone.sh`, to switch the correct brach.
-ARG GITHUB_USER_NAME="syslogic"
-ARG GUTHUB_REPO_NAME="android-cuttlefish"
+ARG GITHUB_USER="syslogic"
+ARG GUTHUB_REPO="android-cuttlefish"
+ARG GITHUB_BRANCH="rpmbuild"
 
 # Don't ask for the `sudo` password.
 RUN [ "echo", "%docker", "ALL=(ALL)", "NOPASSWD:", "ALL", ">", "/etc/sudoers.d/docker.conf" ]
@@ -25,8 +26,6 @@ RUN [ "touch", "/home/runner/.dockerenv" ]
 
 # Base Image
 FROM linux AS base_image
-ENV REPO_USER="${GITHUB_USER_NAME}"
-ENV REPO_NAME="${GUTHUB_REPO_NAME}"
 
 # The EPEL repository installs `dnf-core-plugin` (`config-manager` and `builddeps`) and provides `ncurses-compat-libs`.
 # Configuring further package repositories: / https://wiki.rockylinux.org/rocky/repo/#extra-repositories
@@ -45,6 +44,10 @@ WORKDIR "/home/runner"
 
 # Host Orchestration
 FROM base_image AS orchestration
+ENV REPO_USER="${GITHUB_USER}"
+ENV REPO_NAME="${GUTHUB_REPO}"
+ENV REPO_BRANCH="${GITHUB_BRANCH}"
+
 ENTRYPOINT [ "/home/runner/services.sh" ]
 
 # Expose Operator Port (HTTP:1080, HTTPS:1443)
