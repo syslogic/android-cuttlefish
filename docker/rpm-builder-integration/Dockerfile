@@ -2,46 +2,31 @@
 ARG LINUX_IMAGE=rockylinux/rockylinux:9.5
 FROM $LINUX_IMAGE AS linux
 
-LABEL description="RPM Builder" version="1.0.0" repository="https://github.com/google/android-cuttlefish" maintainer="Martin Zeitler"
+LABEL description="RPM Builder" version="1.0.1" repository="https://github.com/google/android-cuttlefish" maintainer="Martin Zeitler"
 WORKDIR "/root"
 
-# GitHub Arguments
+# Arguments
 # TODO: To be changed to `google` upon merging to `main` branch.
 # This is merely being used in `clone.sh`, to switch the correct brach.
-ARG USER="syslogic"
-ARG REPO="android-cuttlefish"
+ARG GITHUB_USER_NAME="syslogic"
+ARG GUTHUB_REPO_NAME="android-cuttlefish"
 
-# PGP Arguments
-# TODO: PGP signature and passphrase are required to sign packages.
-ARG SIGNATURE=""
-ARG PASSPHRASE=""
-
-# Decluttering some unused files.
-RUN [ "rm", "/root/.cshrc", "/root/.tcshrc" ]
-
-# Note: The container scripts are checking for this file,
-# in order to prevent accidentlly running them on the host.
-RUN [ "touch", "/root/.dockerenv" ]
+# Don't ask for the `sudo` password.
+RUN [ "echo", "%docker", "ALL=(ALL)", "NOPASSWD:", "ALL", ">", "/etc/sudoers.d/docker.conf" ]
 
 # Adding the user provides the home directory.
 RUN [ "groupadd", "-g", "117", "docker" ]
 RUN [ "useradd", "-g", "117", "-u", "1001", "-s", "/bin/bash", "runner" ]
-RUN [ "mkdir", "-p", "/github/home" ]
-RUN [ "chown", "-R", "runner:docker", "/github" ]
-RUN [ "ln", "-s", "/github/home", "/home/runner" ]
+
+# Note: The container scripts are checking for this file,
+# in order to prevent accidentlly running them on the host.
+RUN [ "touch", "/home/runner/.dockerenv" ]
 
 
 # Base Image
-FROM linux AS base_x86
-ENV REPO_USER="${USER}"
-ENV REPO_NAME="${REPO}"
-
-# https://docs.docker.com/reference/dockerfile/#notes-about-specifying-volumes
-# The host directory is declared at container run-time, with `--volume`, eg.
-# --volume /home/username/android-cuttlefish/.rpms/:/home/github/.rpms
-WORKDIR "/home/runner"
-RUN [ "mkdir", "/home/runner/.rpms" ]
-VOLUME [ "/home/runner/.rpms" ]
+FROM linux AS base_image
+ENV REPO_USER="${GITHUB_USER_NAME}"
+ENV REPO_NAME="${GUTHUB_REPO_NAME}"
 
 # The EPEL repository installs `dnf-core-plugin` (`config-manager` and `builddeps`) and provides `ncurses-compat-libs`.
 # Configuring further package repositories: / https://wiki.rockylinux.org/rocky/repo/#extra-repositories
@@ -51,9 +36,15 @@ RUN [ "dnf", "config-manager", "--set-enabled", "crb" ]
 RUN [ "dnf", "-y", "upgrade" ]
 RUN [ "dnf", "clean", "all" ]
 
+# https://docs.docker.com/reference/dockerfile/#notes-about-specifying-volumes
+# The host directory is declared at container run-time, with `--volume`, eg.
+# --volume /home/username/android-cuttlefish/.rpms/:/home/github/.rpms
+RUN [ "mkdir", "/home/runner/.rpms" ]
+VOLUME [ "/home/runner/.rpms" ]
+WORKDIR "/home/runner"
 
 # Integration
-FROM base_x86 AS integration
+FROM base_image AS integration
 ENTRYPOINT [ "/bin/bash" ]
 
 # Expose Operator Port (HTTP:1080, HTTPS:1443)
@@ -65,8 +56,8 @@ EXPOSE 15550-15560
 # Expose ADB
 EXPOSE 6520-6620
 
-RUN [ "touch", "/home/runner/.dockerenv" ]
-RUN [ "echo", "%docker", "ALL=(ALL)", "NOPASSWD:", "ALL", ">", "/etc/sudoers.d/docker.conf" ]
+COPY [ "./docker/rpm-builder/scripts/install_rpm.sh", "/home/runner/install_rpm.sh" ]
+RUN [ "chmod", "+x", "/home/runner/install_rpm.sh" ]
 
 # Add prebuilt RPM packages.
 COPY [ "./.rpms/cuttlefish-base-*", "/home/runner/.rpms/" ]
@@ -74,7 +65,7 @@ COPY [ "./.rpms/cuttlefish-integration-*", "/home/runner/.rpms/" ]
 COPY [ "./.rpms/cuttlefish-user-*", "/home/runner/.rpms/" ]
 
 # Install Android Cuttlefish.
-RUN [ "/bin/bash", "-c", "/home/runner/rpm_install.sh" ]
+RUN [ "/bin/bash", "-c", "/home/runner/install_rpm.sh" ]
 RUN [ "dnf", "clean", "all" ]
 
 # Run commands as user `github` by default.
