@@ -57,6 +57,10 @@ jobs:
       ENV_VARS: '--env REPO_USER="${{ INPUTS.USERNAME }}" --env REPO_NAME="${{ INPUTS.REPOSITORY }}" --env REPO_BRANCH="${{ INPUTS.BRANCH }}"'
     steps:
 
+      - name: Set ARTIFACT_NAME as variable
+        shell: bash
+        run: echo "ARTIFACT_NAME=android-cuttlefish-rhel9-${${{ RUNNER.ARCH }},,}"-unsigned" >> $GITHUB_ENV
+
       # https://github.com/docker/login-action
       - name: Log in to the Container registry
         uses: 'docker/login-action@v3'
@@ -98,13 +102,14 @@ jobs:
         with:
           path: "${{ RUNNER.TEMP }}/.rpms"
           include-hidden-files: 'true'
-          name: android-cuttlefish-rhel9-${{ RUNNER.ARCH }}
+          name: ${{ ENV.ARTIFACT_NAME }}
           retention-days: 14
 
       - name: List directory ${{ RUNNER.TEMP }}/.rpms
         id: list-rpm-packages
         shell: bash
         run: |
+          [ "$(ls -1 ${{ RUNNER.TEMP }}/.rpms/*.rpm 2>/dev/null | wc -l)" -lt 4 ] && echo "::warning file=reusable-docker.yml,line=108,endLine=108,title=RPM Build::Not all packages were built."
           printf "Ubuntu mount-point: %s" "${{ RUNNER.TEMP }}/.rpms"
           ls -la ${{ RUNNER.TEMP }}/.rpms
           ls -lan ${{ RUNNER.TEMP }}/.rpms

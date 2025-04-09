@@ -129,7 +129,6 @@ jobs:
     with:
       registry: 'ghcr.io'
       username: ${{ GITHUB.ACTOR }}
-      branch: ${{ GITHUB.HEAD_REF || GITHUB.REF_NAME }}
       platform: ${{ MATRIX.PLATFORM }}
       runner: ${{ MATRIX.RUNNER }}
       linux: ${{ MATRIX.LINUX }}
@@ -158,7 +157,6 @@ jobs:
     with:
       registry: 'ghcr.io'
       username: ${{ GITHUB.ACTOR }}
-      branch: ${{ GITHUB.HEAD_REF || GITHUB.REF_NAME }}
       platform: ${{ MATRIX.PLATFORM }}
       runner: ${{ MATRIX.RUNNER }}
       linux: ${{ MATRIX.LINUX }}

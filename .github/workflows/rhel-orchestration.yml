@@ -13,10 +13,6 @@ on:
       username:
         required: true
         type: string
-      branch:
-        default: main
-        required: false
-        type: string
       image:
         required: true
         type: string
@@ -36,12 +32,6 @@ on:
         default: rockylinux/rockylinux:9.5
         required: false
         type: string
-      pgp_signature:
-        required: false
-        type: string
-      pgp_passphrase:
-        required: false
-        type: string
 
 jobs:
 
@@ -52,16 +42,16 @@ jobs:
       DOCKER_IMAGE: ${{ INPUTS.REGISTRY }}/${{ INPUTS.USERNAME }}/${{ INPUTS.IMAGE }}
     steps:
 
-      - name: Set ENV variable
-        run: |
-          echo "REPO_NAME=${GITHUB_REPOSITORY#$GITHUB_REPOSITORY_OWNER/}" >> $GITHUB_ENV
+      - name: Set ARTIFACT_NAME as variable
+        shell: bash
+        run: echo "ARTIFACT_NAME=android-cuttlefish-rhel9-${${{ RUNNER.ARCH }},,}"-unsigned" >> $GITHUB_ENV
 
       # https://github.com/actions/download-artifact
       - name: Restore Artifacts (*.rpm)
         uses: 'actions/download-artifact@v4'
         id: restore-rpm-packages
         with:
-          name: android-cuttlefish-rhel9-${{ RUNNER.ARCH }}
+          name: ${{ ENV.ARTIFACT_NAME }}
           path: '${{ RUNNER.TEMP }}/.rpms'
 
       - name: List directory ${{ RUNNER.TEMP }}/.rpms
@@ -108,9 +98,6 @@ jobs:
           target: orchestration
           build-args: |
             LINUX_IMAGE=${{ MATRIX.LINUX }}
-            GITHUB_USER=${{ INPUTS.USERNAME }}
-            GITHUB_REPO=${{ ENV.REPO_NAME }}
-            GITHUB_BRANCH=${{ INPUTS.BRANCH }}
 
       # Note: The digest comes from `buildx`, not the metadata.
       # https://github.com/actions/attest-build-provenance

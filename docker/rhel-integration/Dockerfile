@@ -5,13 +5,6 @@ FROM $LINUX_IMAGE AS linux
 LABEL description="RPM Builder" version="1.0.1" repository="https://github.com/google/android-cuttlefish" maintainer="Martin Zeitler"
 WORKDIR "/root"
 
-# Arguments
-# TODO: To be changed to `google` upon merging to `main` branch.
-# This is merely being used in `clone.sh`, to switch the correct brach.
-ARG GITHUB_USER="syslogic"
-ARG GUTHUB_REPO="android-cuttlefish"
-ARG GITHUB_BRANCH="rpmbuild"
-
 # Don't ask for the `sudo` password.
 RUN [ "echo", "%docker", "ALL=(ALL)", "NOPASSWD:", "ALL", ">", "/etc/sudoers.d/docker.conf" ]
 
@@ -44,10 +37,6 @@ WORKDIR "/home/runner"
 
 # Integration
 FROM base_image AS integration
-ENV REPO_USER="${GITHUB_USER}"
-ENV REPO_NAME="${GUTHUB_REPO}"
-ENV REPO_BRANCH="${GITHUB_BRANCH}"
-
 ENTRYPOINT [ "/bin/bash" ]
 
 # Expose Operator Port (HTTP:1080, HTTPS:1443)
@@ -67,7 +56,7 @@ COPY [ "./.rpms/cuttlefish-base-*", "/home/runner/.rpms/" ]
 COPY [ "./.rpms/cuttlefish-integration-*", "/home/runner/.rpms/" ]
 COPY [ "./.rpms/cuttlefish-user-*", "/home/runner/.rpms/" ]
 
-# Install Android Cuttlefish.
+# Install Android Cuttlefish RPM.
 RUN [ "/bin/bash", "-c", "/home/runner/install_rpm.sh" ]
 RUN [ "dnf", "clean", "all" ]
 
