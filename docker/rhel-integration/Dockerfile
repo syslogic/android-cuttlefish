@@ -3,7 +3,6 @@ ARG LINUX_IMAGE=rockylinux/rockylinux:9.5
 FROM $LINUX_IMAGE AS linux
 
 LABEL description="RPM Builder" version="1.0.1" repository="https://github.com/google/android-cuttlefish" maintainer="Martin Zeitler"
-WORKDIR "/root"
 
 # Don't ask for the `sudo` password.
 RUN [ "echo", "%docker", "ALL=(ALL)", "NOPASSWD:", "ALL", ">", "/etc/sudoers.d/docker.conf" ]
@@ -48,17 +47,13 @@ EXPOSE 15550-15560
 # Expose ADB
 EXPOSE 6520-6620
 
-COPY [ "./docker/rpm-builder/scripts/install_rpm.sh", "/home/runner/install_rpm.sh" ]
-RUN [ "chmod", "+x", "/home/runner/install_rpm.sh" ]
-
-# Add prebuilt RPM packages.
+# Add prebuilt RPM packages and install them.
 COPY [ "./.rpms/cuttlefish-base-*", "/home/runner/.rpms/" ]
 COPY [ "./.rpms/cuttlefish-integration-*", "/home/runner/.rpms/" ]
 COPY [ "./.rpms/cuttlefish-user-*", "/home/runner/.rpms/" ]
 
-# Install Android Cuttlefish RPM.
-RUN [ "/bin/bash", "-c", "/home/runner/install_rpm.sh" ]
+RUN for file in /home/runner/.rpms/* ; do dnf -y install $file; done
 RUN [ "dnf", "clean", "all" ]
 
-# Run commands as user `github` by default.
+# Run commands as user `runner` by default.
 USER 1001
