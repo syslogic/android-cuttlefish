@@ -1,7 +1,8 @@
 # Dockerfile based on `rockylinux/rockylinux:9.5`
 ARG LINUX_IMAGE=rockylinux/rockylinux:9.5
-FROM $LINUX_IMAGE AS linux
 
+# Base Image
+FROM $LINUX_IMAGE AS base_image
 LABEL description="RPM Builder" version="1.0.1" repository="https://github.com/google/android-cuttlefish" maintainer="Martin Zeitler"
 
 # Don't ask for the `sudo` password.
@@ -14,10 +15,6 @@ RUN [ "useradd", "-g", "117", "-u", "1001", "-s", "/bin/bash", "runner" ]
 # Note: The container scripts are checking for this file,
 # in order to prevent accidentlly running them on the host.
 RUN [ "touch", "/home/runner/.dockerenv" ]
-
-
-# Base Image
-FROM linux AS base_image
 
 # The EPEL repository installs `dnf-core-plugin` (`config-manager` and `builddeps`) and provides `ncurses-compat-libs`.
 # Configuring further package repositories: / https://wiki.rockylinux.org/rocky/repo/#extra-repositories
@@ -36,6 +33,8 @@ WORKDIR "/home/runner"
 
 # Host Orchestration
 FROM base_image AS orchestration
+
+# Required to keep the container running.
 ENTRYPOINT [ "/home/runner/services.sh" ]
 
 # Expose Operator Port (HTTP:1080, HTTPS:1443)
@@ -46,6 +45,12 @@ EXPOSE 2080 2443
 EXPOSE 15550-15560
 # Expose ADB
 EXPOSE 6520-6620
+
+# Import Google RPM repository public key.
+# https://www.google.com/linuxrepositories/
+RUN [ "dnf", "-y", "install", "wget"]
+RUN [ "wget", "https://dl.google.com/linux/linux_signing_key.pub" ]
+RUN [ "rpm", "--import", "linux_signing_key.pub" ]
 
 # Add prebuilt RPM packages and install them.
 COPY [ "./.rpms/cuttlefish-base-*", "/home/runner/.rpms/" ]
@@ -58,5 +63,6 @@ RUN [ "dnf", "clean", "all" ]
 COPY [ "./docker/rpm-builder/scripts/services.sh", "/home/runner/services.sh" ]
 RUN [ "chmod", "+x", "/home/runner/services.sh" ]
 
-# Run commands as user `runner` by default.
+# Run commands as user `runner` by default,
+# who happens to be the owner of the RPM packages.
 USER 1001

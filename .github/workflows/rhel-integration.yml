@@ -4,28 +4,35 @@ on:
   workflow_call:
     secrets:
       token:
+        description: 'GitHub auth token'
         required: true
     inputs:
       registry:
+        description: 'Docker registry hostname'
         default: 'ghcr.io'
         required: false
         type: string
       username:
+        description: 'Docker registry username'
         required: true
         type: string
       image:
+        description: 'Docker image name'
         required: true
         type: string
       tag:
+        description: 'Docker image tag'
         default: latest
         required: false
         type: string
-      runner:
-          default: ubuntu-22.04
-          required: false
-          type: string
       platform:
+        description: 'The platform to build for'
         default: linux/amd64
+        required: false
+        type: string
+      runner:
+        description: 'GitHub actions runner image label'
+        default: ${{ VARS.RUNNER_86 }}
         required: false
         type: string
 
@@ -81,14 +88,13 @@ jobs:
         id: build
         with:
           context: .
+          target: integration
           file: docker/rhel-integration/Dockerfile
           push: ${{ GITHUB.EVENT_NAME != 'pull_request' }}
           platforms: ${{ INPUTS.PLATFORM }}
           labels: ${{ STEPS.METADATA.OUTPUTS.LABELS }}
           tags: ${{ STEPS.METADATA.OUTPUTS.TAGS }}
-          target: integration
-          build-args: |
-            LINUX_IMAGE=${{ INPUTS.LINUX }}
+          build-args: LINUX_IMAGE=${{ VARS.RHEL_LINUX_IMAGE }}
 
       # Note: The digest comes from `buildx`, not the metadata.
       # https://github.com/actions/attest-build-provenance
