@@ -1,9 +1,11 @@
 # Dockerfile based on `rockylinux/rockylinux:9.5`
 ARG LINUX_IMAGE=rockylinux/rockylinux:9.5
-
-# Base Image
 FROM $LINUX_IMAGE AS base_image
-LABEL description="RPM Builder" version="1.0.1" repository="https://github.com/google/android-cuttlefish" maintainer="Martin Zeitler"
+LABEL description="RHEL Orchestration"
+LABEL version="1.0.1"
+LABEL repository="https://github.com/google/android-cuttlefish"
+LABEL maintainer="Martin Zeitler"
+SHELL [ "/bin/bash", "-c" ]
 
 # Don't ask for the `sudo` password.
 RUN [ "echo", "%docker", "ALL=(ALL)", "NOPASSWD:", "ALL", ">", "/etc/sudoers.d/docker.conf" ]

@@ -1,10 +1,8 @@
 # Dockerfile based on `rockylinux/rockylinux:9.5`
 ARG LINUX_IMAGE=rockylinux/rockylinux:9.5
-
-# Base Image
 FROM $LINUX_IMAGE AS base_image
 LABEL description="RPM Builder" version="1.0.1" repository="https://github.com/google/android-cuttlefish" maintainer="Martin Zeitler"
-WORKDIR "/root"
+SHELL [ "/bin/bash", "-c" ]
 
 # Arguments
 # TODO: To be changed to `google` upon merging to `main` branch.
@@ -23,6 +21,18 @@ RUN [ "useradd", "-g", "117", "-u", "1001", "-s", "/bin/bash", "runner" ]
 # Note: The container scripts are checking for this file,
 # in order to prevent accidentlly running them on the host.
 RUN [ "touch", "/home/runner/.dockerenv" ]
+
+# Google Cloud SDK
+# COPY <<EOF /etc/yum.repos.d/google-cloud-sdk.repo
+# [google-cloud-sdk]
+# name=Google Cloud SDK
+# baseurl=https://packages.cloud.google.com/yum/repos/cloud-sdk-el9-x86_64
+# enabled=1
+# gpgcheck=1
+# repo_gpgcheck=1
+# gpgkey=https://packages.cloud.google.com/yum/doc/yum-key.gpg
+#        https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg
+# EOF
 
 # The EPEL repository installs `dnf-core-plugin` (`config-manager` and `builddeps`) and provides `ncurses-compat-libs`.
 # Configuring further package repositories: / https://wiki.rockylinux.org/rocky/repo/#extra-repositories
@@ -44,6 +54,8 @@ FROM base_image AS builder
 ENV REPO_USER="${GITHUB_USER}"
 ENV REPO_NAME="${GUTHUB_REPO}"
 ENV REPO_BRANCH="${GITHUB_BRANCH}"
+
+# To be supplied at runtime.
 ENV RPM_SIGN_SIGNATURE=""
 ENV RPM_SIGN_PASSPHRASE=""
 
@@ -51,7 +63,7 @@ ENV RPM_SIGN_PASSPHRASE=""
 ENTRYPOINT [ "/bin/bash", "-c", "/home/runner/build.sh", "${REPO_USER}", "${REPO_NAME}", "${REPO_BRANCH}" ]
 
 # Build dependencies.
-RUN [ "dnf", "-y", "install", "sudo", "nano", "git", "wget", "cmake", "gcc-c++", "rpm-build", "golang-bin", "expect", "vim-common", "ncurses-compat-libs", "curl-devel", "wayland-devel", "protobuf-devel", "protobuf-compiler", "ca-certificates" ]
+RUN [ "dnf", "-y", "install", "sudo", "nano", "git", "wget", "cmake", "gcc-c++", "rpm-build", "golang-bin", "expect", "vim-common", "ncurses-compat-libs", "curl-devel", "wayland-devel", "libzip-devel", "protobuf-devel", "protobuf-compiler", "ca-certificates" ]
 RUN [ "dnf", "-y", "upgrade" ]
 RUN [ "dnf", "clean", "all" ]
 
