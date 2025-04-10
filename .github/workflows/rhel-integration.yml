@@ -28,10 +28,6 @@ on:
         default: linux/amd64
         required: false
         type: string
-      linux:
-        default: rockylinux/rockylinux:9.5
-        required: false
-        type: string
 
 jobs:
 
@@ -42,17 +38,11 @@ jobs:
       DOCKER_IMAGE: ${{ INPUTS.REGISTRY }}/${{ INPUTS.USERNAME }}/${{ INPUTS.IMAGE }}
     steps:
 
-      - id: setup
-        shell: bash
-        run: |
-          echo "ARTIFACT_NAME=android-cuttlefish-rhel9-${${{ RUNNER.ARCH }},,}-unsigned" >> $GITHUB_ENV
-          env
-
       # https://github.com/actions/download-artifact
       - uses: 'actions/download-artifact@v4'
         id: restore-rpm-packages
         with:
-          name: ${{ ENV.ARTIFACT_NAME }}
+          name: android-cuttlefish-rhel9-**
           path: '${{ RUNNER.TEMP }}/.rpms'
 
       - name: List directory ${{ RUNNER.TEMP }}/.rpms

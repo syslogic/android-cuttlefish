@@ -2,7 +2,7 @@
 
 # It clones the repository, builds the packages and archives them.
 [ ! -f "${HOME}/.dockerenv" ] && echo ".dockerenv not present, exiting now." && exit 1
-[ $# -lt 3 ] && echo "REPO_USER, REPO_NAME or REPO_BRANCH missing, using defaults." && REPO_USER=syslogic && REPO_NAME=android-cuttlefish && REPO_BRANCH=redhat-workflow
+[ $# -lt 3 ] && echo "REPO_USER, REPO_NAME or REPO_BRANCH missing, using defaults." && REPO_USER=syslogic && REPO_NAME=android-cuttlefish && REPO_BRANCH=rpm-build
 [ $# -eq 2 ] && REPO_USER=$1 && REPO_NAME=$2 && REPO_BRANCH=rpmbuild
 [ $# -eq 3 ] && REPO_USER=$1 && REPO_NAME=$2 && REPO_BRANCH=$3
 
@@ -39,4 +39,4 @@ ls -la "${RPMS}"
 ls -lan "${RPMS}"
 
 # shellcheck disable=SC2012
-[ "$(ls -1 "${RPMS}" 2>/dev/null | wc -l)" -gt 0 ] || exit 1
+[ "$(ls -1 "${RPMS}" 2>/dev/null | wc -l)" -lt 4 ] || exit 1
