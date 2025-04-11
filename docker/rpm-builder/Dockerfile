@@ -6,21 +6,22 @@ SHELL [ "/bin/bash", "-c" ]
 
 # Arguments
 # TODO: To be changed to `google` upon merging to `main` branch.
-# This is merely being used in `clone.sh`, to switch the correct brach.
+# This is merely being used by `clone.sh`, to switch the brach.
 ARG GITHUB_USER="syslogic"
 ARG GUTHUB_REPO="android-cuttlefish"
 ARG GITHUB_BRANCH="rpmbuild"
 
-# Don't ask for the `sudo` password.
-RUN [ "echo", "%docker", "ALL=(ALL)", "NOPASSWD:", "ALL", ">", "/etc/sudoers.d/docker.conf" ]
+ARG RUNNER_GID="118"
+ARG RUNNER_UID="1001"
+ENV GID="${RUNNER_GID}"
+ENV UID="${RUNNER_UID}"
 
 # Adding the user provides the home directory.
-RUN [ "groupadd", "-g", "117", "docker" ]
-RUN [ "useradd", "-g", "117", "-u", "1001", "-s", "/bin/bash", "runner" ]
+RUN groupadd -f -g ${GID} docker
+RUN useradd -g ${GID} -u ${UID} -s /bin/bash runner
 
-# Note: The container scripts are checking for this file,
-# in order to prevent accidentlly running them on the host.
-RUN [ "touch", "/home/runner/.dockerenv" ]
+# Don't ask for the `sudo` password.
+RUN [ "echo", "%docker", "ALL=(ALL)", "NOPASSWD:", "ALL", ">", "/etc/sudoers.d/docker.conf" ]
 
 # Google Cloud SDK
 # COPY <<EOF /etc/yum.repos.d/google-cloud-sdk.repo

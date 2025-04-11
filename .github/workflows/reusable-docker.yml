@@ -6,7 +6,7 @@ on:
       token:
         description: 'GitHub auth token'
         required: true
-      # TODO: This likely would be the signature required.
+      # TODO: This might be the signature required.
       # https://dl.google.com/linux/linux_signing_key.pub
       pgp_signature:
         description: 'PGP signature for signing RPM'
@@ -43,10 +43,6 @@ on:
         default: main
         required: false
         type: string
-      artifact:
-        description: 'GitHub artifact filename'
-        required: true
-        type: string
       platform:
         description: 'The platform to build for'
         default: linux/amd64
@@ -65,8 +61,14 @@ jobs:
     env:
       DOCKER_IMAGE: ${{ INPUTS.REGISTRY }}/${{ INPUTS.USERNAME }}/${{ INPUTS.IMAGE }}:${{ INPUTS.TAG }}
       DOCKER_OPTIONS: '--name ${{ INPUTS.IMAGE }} --platform ${{ INPUTS.PLATFORM }} --attach STDERR --attach STDOUT --quiet'
-      ENV_VARS: '--env REPO_USER="${{ INPUTS.USERNAME }}" --env REPO_NAME="${{ INPUTS.REPOSITORY }}" --env REPO_BRANCH="${{ INPUTS.BRANCH }}"'
+      ENV_VARS: '--env REPO_USER="${{ INPUTS.USERNAME }}" --env REPO_NAME="${{ INPUTS.REPOSITORY }}" --env REPO_BRANCH="${{ INPUTS.BRANCH }}" --env RUNNER_UID="${{ NEEDS.SETUP.OUTPUTS.RUNNER_UID }}" --env RUNNER_GID="${{ NEEDS.SETUP.OUTPUTS.RUNNER_GID }}"'
     steps:
+
+      - shell: bash
+        id: setup
+        run: |
+          [ ${{ INPUTS.PLATFORM }} = 'linux/amd64' ] && PLATFORM=amd64 || PLATFORM=arm64
+          echo "ARTIFACT_NAME=${{ INPUTS.REPOSITORY }}-rhel9-${PLATFORM}-unsigned" >> $GITHUB_OUTPUT
 
       # https://github.com/docker/login-action
       - name: Log in to the Container registry
@@ -106,7 +108,7 @@ jobs:
         id: retain-rpm-packages
         if: ${{ success() }}
         with:
-          name: ${{ INPUTS.ARTIFACT }}
+          name: ${{ STEPS.SETUP.OUTPUT.ARTIFACT_NAME }}
           path: "${{ RUNNER.TEMP }}/.rpms"
           include-hidden-files: 'true'
           retention-days: 14

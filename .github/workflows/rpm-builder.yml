@@ -56,9 +56,14 @@ jobs:
       # https://github.com/marketplace/actions/build-and-push-docker-images
       - uses: 'docker/setup-buildx-action@v3'
       - uses: 'docker/setup-qemu-action@v3'
-        if: ${{ MATRIX.PLATFORM != 'linux/amd64' }}
-        with:
-          platforms: arm64
+        if: ${{ MATRIX.PLATFORM == 'linux/arm64' }}
+        with: { platforms: arm64 }
+
+      - shell: bash
+        id: setup
+        run: |
+          echo "RUNNER_GID=$(id -g)" >> $GITHUB_OUTPUT
+          echo "RUNNER_UID=$(id -u)" >> $GITHUB_OUTPUT
 
       - uses: 'docker/build-push-action@v6'
         id: build
@@ -71,10 +76,12 @@ jobs:
           labels: ${{ STEPS.METADATA.OUTPUTS.LABELS }}
           tags: ${{ STEPS.METADATA.OUTPUTS.TAGS }}
           build-args: |
-            LINUX_IMAGE=${{ VARS.RHEL_LINUX_IMAGE }}
             GITHUB_USER=${{ GITHUB.ACTOR }}
             GITHUB_REPO=${{ ENV.REPO_NAME }}
             GITHUB_BRANCH=${{ GITHUB.HEAD_REF || GITHUB.REF_NAME }}
+            RUNNER_GID=${{ STEPS.SETUP.OUTPUTS.RUNNER_GID }}
+            RUNNER_UID=${{ STEPS.SETUP.OUTPUTS.RUNNER_UID }}
+            LINUX_IMAGE=${{ VARS.RHEL_LINUX_IMAGE }}
 
       # Note: The digest comes from `buildx`, not the metadata.
       # https://github.com/actions/attest-build-provenance
@@ -98,7 +105,6 @@ jobs:
       runner: ${{ MATRIX.RUNNER }}
       image: ${{ MATRIX.IMAGE }}
       platform: ${{ MATRIX.PLATFORM }}
-      artifact: ${{ MATRIX.ARTIFACT }}
     strategy:
       max-parallel: 2
       matrix:
@@ -107,11 +113,9 @@ jobs:
           - platform: linux/amd64
             runner: ${{ VARS.RUNNER_X86 }}
             image: rpm-builder-amd64
-            artifact: android-cuttlefish-rhel9-amd64-unsigned
           - platform: linux/arm64
             runner: ${{ VARS.RUNNER_ARM }}
             image: rpm-builder-arm64
-            artifact: android-cuttlefish-rhel9-arm64-unsigned
 
   # This must be a job, in order to pass `secrets`.
   preinstall_integration:
@@ -132,7 +136,7 @@ jobs:
         platform: [ linux/amd64, linux/arm64 ]
         include:
           - platform: linux/amd64
-            runner: ${{ VARS.RUNNER_86 }}
+            runner: ${{ VARS.RUNNER_X86 }}
             image: rhel-integration-amd64
           - platform: linux/arm64
             runner: ${{ VARS.RUNNER_ARM }}
