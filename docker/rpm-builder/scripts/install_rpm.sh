@@ -5,8 +5,6 @@
 cd "${HOME}/.rpms" || echo "${HOME}/.rpms not found, exiting now." && exit 1
 
 PACKAGES="nano"
-for FILE in ${HOME}/.rpms; do
-    PACKAGES="${PACKAGES} $FILE"
-done
+for package in ${HOME}/.rpms; do PACKAGES="${PACKAGES} $package"; done
 echo "Packages to install: ${PACKAGES}"
 dnf -y install "${PACKAGES}"

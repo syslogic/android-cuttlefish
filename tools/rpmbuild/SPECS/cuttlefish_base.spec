@@ -11,7 +11,7 @@ BuildRoot:      %{_tmppath}/%{name}-%{version}-%{release}-root-%(%{__id_u} -n)
 
 # Note: `ncurses-compat-libs` require EPEL repository and `protobuf` requires CRB repository.
 BuildRequires:  go, cmake, gcc-c++, ncurses-compat-libs, protobuf-devel, protobuf-compiler, vim-common
-BuildRequires:   curl-devel, openssl-devel, wayland-devel, libaom-devel, opus-devel, libzip-devel, libzstd-devel
+BuildRequires:   curl-devel, openssl-devel, wayland-devel, libaom-devel, opus-devel, libzip-devel
 
 Requires:       shadow-utils, redhad-lsb-5.0, ebtables-legacy, iproute
 Requires:       iptables-legacy, bridge-utils, dnsmasq, libfdt, e2fsprogs, ebtables, iptables, bsdtar

@@ -59,7 +59,7 @@ ENV RPM_SIGN_PASSPHRASE=""
 ENTRYPOINT [ "/bin/bash", "-c", "/home/runner/build.sh", "${REPO_USER}", "${REPO_NAME}", "${REPO_BRANCH}" ]
 
 # Build dependencies.
-RUN [ "dnf", "-y", "install", "git", "cmake", "gcc-c++", "rpm-build", "golang-bin", "expect", "vim-common", "ncurses-compat-libs", "curl-devel", "wayland-devel", "libaom-devel", "opus-devel", "libzip-devel", "libzstd-devel", "protobuf-devel", "protobuf-compiler" ]
+RUN [ "dnf", "-y", "install", "git", "cmake", "gcc-c++", "rpm-build", "golang-bin", "expect", "vim-common", "ncurses-compat-libs", "curl-devel", "wayland-devel", "libaom-devel", "opus-devel", "libzip-devel", "protobuf-devel", "protobuf-compiler" ]
 RUN [ "dnf", "-y", "upgrade" ]
 RUN [ "dnf", "clean", "all" ]
 
