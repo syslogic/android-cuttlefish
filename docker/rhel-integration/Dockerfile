@@ -6,7 +6,7 @@ LABEL version="1.0.2"
 LABEL repository="https://github.com/google/android-cuttlefish"
 LABEL maintainer="Martin Zeitler"
 SHELL [ "/bin/bash", "-c" ]
-WORKDIR "/home/runner"
+
 
 # Arguments
 ARG RUNNER_GID="118"
@@ -23,7 +23,7 @@ RUN [ "echo", "%docker", "ALL=(ALL)", "NOPASSWD:", "ALL", ">", "/etc/sudoers.d/d
 
 # The EPEL repository installs `dnf-core-plugin` (`config-manager` and `builddeps`) and provides `ncurses-compat-libs`.
 # Configuring further package repositories: / https://wiki.rockylinux.org/rocky/repo/#extra-repositories
-RUN [ "dnf", "-y", "install", "wget", "https://dl.fedoraproject.org/pub/epel/epel-release-latest-9.noarch.rpm"]
+RUN [ "dnf", "-y", "install", "sudo", "nano", "wget", "https://dl.fedoraproject.org/pub/epel/epel-release-latest-9.noarch.rpm"]
 RUN [ "rm", "/etc/yum.repos.d/epel-cisco-openh264.repo" ]
 RUN [ "dnf", "config-manager", "--set-enabled", "crb" ]
 RUN [ "dnf", "-y", "upgrade" ]
@@ -31,14 +31,13 @@ RUN [ "dnf", "clean", "all" ]
 
 # Import Google RPM repository public key.
 # https://www.google.com/linuxrepositories/
-RUN [ "wget", "https://dl.google.com/linux/linux_signing_key.pub" ]
-RUN [ "rpm", "--import", "linux_signing_key.pub" ]
+# RUN [ "wget", "https://dl.google.com/linux/linux_signing_key.pub" ]
+# RUN [ "rpm", "--import", "linux_signing_key.pub" ]
 
 
 # Integration
 FROM base_image AS integration
-# ARG ARTIFACT_PATH="/home/runner/work/android-cuttlefish/android-cuttlefish/.rpms"
-ARG ARTIFACT_PATH="./.rpms"
+ARG ARTIFACT_PATH=./.rpms
 
 # Provide an interactive shell.
 ENTRYPOINT [ "/bin/bash" ]
@@ -55,18 +54,21 @@ EXPOSE 15550-15560
 # Expose ADB
 EXPOSE 6520-6620
 
-# Container scripts.
-RUN [ "touch", "/home/runner/.dockerenv" ]
-COPY [ "./docker/rpm-builder/scripts/install_rpm.sh", "/home/runner/install_rpm.sh" ]
-RUN [ "chmod", "+x", "/home/runner/install_rpm.sh" ]
-
 # Restore build artifacts.
-RUN [ "mkdir", "-p", "/home/runner/.rpms" ]
+RUN [ "mkdir", "/home/runner/.rpms" ]
+RUN [ "touch", "/root/.dockerenv", "/home/runner/.dockerenv" ]
 COPY [ "${ARTIFACT_PATH}/cuttlefish-integration-*", "/home/runner/.rpms" ]
 COPY [ "${ARTIFACT_PATH}/cuttlefish-user-*", "/home/runner/.rpms/" ]
 COPY [ "${ARTIFACT_PATH}/cuttlefish-base-*", "/home/runner/.rpms/" ]
-RUN [ "bash", "-c", "/home/runner/install_rpm.sh" ]
-RUN [ "dnf", "clean", "all" ]
 
 # Run commands as user `runner`, who is the owner of the RPM packages.
+WORKDIR "/home/runner"
 USER "runner"
+
+# Container scripts.
+COPY [ "./docker/rpm-builder/scripts/install_rpm.sh", "/home/runner/install_rpm.sh" ]
+RUN [ "chmod", "+x", "/home/runner/install_rpm.sh" ]
+
+# Install RPM.
+RUN [ "bash", "-c", "/home/runner/install_rpm.sh" ]
+RUN [ "dnf", "clean", "all" ]

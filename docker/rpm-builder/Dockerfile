@@ -8,7 +8,7 @@ LABEL maintainer="Martin Zeitler"
 SHELL [ "/bin/bash", "-c" ]
 
 # Arguments
-# This is being used by `clone.sh`, to switch the branch.
+# This is being used by `scripts/clone.sh`, to switch the branch.
 ARG GITHUB_USER="google"
 ARG GUTHUB_REPO="android-cuttlefish"
 ARG GITHUB_BRANCH="main"
@@ -27,7 +27,7 @@ RUN [ "echo", "%docker", "ALL=(ALL)", "NOPASSWD:", "ALL", ">", "/etc/sudoers.d/d
 
 # The EPEL repository installs `dnf-core-plugin` (`config-manager` and `builddeps`) and provides `ncurses-compat-libs`.
 # Configuring further package repositories: / https://wiki.rockylinux.org/rocky/repo/#extra-repositories
-RUN [ "dnf", "-y", "install", "wget", "https://dl.fedoraproject.org/pub/epel/epel-release-latest-9.noarch.rpm"]
+RUN [ "dnf", "-y", "install", "sudo", "nano", "wget", "https://dl.fedoraproject.org/pub/epel/epel-release-latest-9.noarch.rpm"]
 RUN [ "rm", "/etc/yum.repos.d/epel-cisco-openh264.repo" ]
 RUN [ "dnf", "config-manager", "--set-enabled", "crb" ]
 RUN [ "dnf", "-y", "upgrade" ]
@@ -35,20 +35,8 @@ RUN [ "dnf", "clean", "all" ]
 
 # Import Google RPM repository public key.
 # https://www.google.com/linuxrepositories/
-RUN [ "wget", "https://dl.google.com/linux/linux_signing_key.pub" ]
-RUN [ "rpm", "--import", "linux_signing_key.pub" ]
-
-# Google Cloud SDK
-# COPY <<EOF /etc/yum.repos.d/google-cloud-sdk.repo
-# [google-cloud-sdk]
-# name=Google Cloud SDK
-# baseurl=https://packages.cloud.google.com/yum/repos/cloud-sdk-el9-x86_64
-# enabled=1
-# gpgcheck=1
-# repo_gpgcheck=1
-# gpgkey=https://packages.cloud.google.com/yum/doc/yum-key.gpg
-#        https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg
-# EOF
+# RUN [ "wget", "https://dl.google.com/linux/linux_signing_key.pub" ]
+# RUN [ "rpm", "--import", "linux_signing_key.pub" ]
 
 # https://docs.docker.com/reference/dockerfile/#notes-about-specifying-volumes
 # The host directory is declared at container run-time, with `--volume`, eg.
@@ -71,7 +59,7 @@ ENV RPM_SIGN_PASSPHRASE=""
 ENTRYPOINT [ "/bin/bash", "-c", "/home/runner/build.sh", "${REPO_USER}", "${REPO_NAME}", "${REPO_BRANCH}" ]
 
 # Build dependencies.
-RUN [ "dnf", "-y", "install", "sudo", "nano", "git", "wget", "cmake", "gcc-c++", "rpm-build", "golang-bin", "expect", "vim-common", "ncurses-compat-libs", "curl-devel", "wayland-devel", "libzip-devel", "protobuf-devel", "protobuf-compiler", "ca-certificates" ]
+RUN [ "dnf", "-y", "install", "git", "cmake", "gcc-c++", "rpm-build", "golang-bin", "expect", "vim-common", "ncurses-compat-libs", "curl-devel", "wayland-devel", "libzip-devel", "protobuf-devel", "protobuf-compiler", "ca-certificates" ]
 RUN [ "dnf", "-y", "upgrade" ]
 RUN [ "dnf", "clean", "all" ]
 
@@ -81,7 +69,7 @@ RUN if [ "$(uname -i)" = "aarch64" ]; then wget --no-verbose --output-document /
 RUN [ "chmod", "+x", "/usr/local/bin/bazel" ]
 
 # Container scripts.
-RUN [ "touch", "/home/runner/.dockerenv" ]
+RUN [ "touch", "/root/.dockerenv", "/home/runner/.dockerenv" ]
 RUN [ "cp", "/root/.bash_profile", "/home/runner/.bash_profile" ]
 COPY [ "./docker/rpm-builder/scripts/build.sh", "/home/runner/build.sh" ]
 COPY [ "./docker/rpm-builder/scripts/clone.sh", "/home/runner/clone.sh" ]
@@ -102,8 +90,8 @@ RUN [ "chown", "-R", "runner:docker", "/home/runner" ]
 # Run commands as by default as user `runner`,
 # else the files in the bind-mounts will be owned by user `root`.
 USER "runner"
-RUN source ~/.bash_profile
 WORKDIR "/home/runner"
+RUN source ~/.bash_profile
 
 
 # RPM Testing

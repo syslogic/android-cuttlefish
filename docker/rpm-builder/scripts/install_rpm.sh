@@ -5,8 +5,8 @@
 cd "${HOME}/.rpms" || echo "${HOME}/.rpms not found, exiting now." && exit 1
 
 PACKAGES=""
-for file in ./*.rpm; do
-    PACKAGES="${PACKAGES} $file"
+for FILE in ./*.rpm; do
+    PACKAGES="${PACKAGES} $FILE"
 done
 echo "Packages to install: ${PACKAGES}"
 dnf -y install "${PACKAGES}"

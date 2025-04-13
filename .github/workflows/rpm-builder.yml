@@ -63,7 +63,8 @@ jobs:
         if: ${{ MATRIX.PLATFORM == 'linux/arm64' }}
         with: { platforms: arm64 }
 
-      - shell: bash
+      - name: Run shell script, which determines the repository name
+        shell: bash
         id: setup
         run: |
           echo "REPOSITORY_NAME=${GITHUB_REPOSITORY#$GITHUB_REPOSITORY_OWNER/}" >> $GITHUB_OUTPUT
