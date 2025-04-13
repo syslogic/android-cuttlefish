@@ -49,20 +49,32 @@ jobs:
       DOCKER_IMAGE: ${{ INPUTS.REGISTRY }}/${{ INPUTS.USERNAME }}/${{ INPUTS.IMAGE }}
     steps:
 
+      - shell: bash
+        id: setup
+        run: |
+          echo "RUNNER_GID=$(id -g)" >> $GITHUB_OUTPUT
+          echo "RUNNER_UID=$(id -u)" >> $GITHUB_OUTPUT
+          PLATFORM='${{ INPUTS.PLATFORM }}'
+          ARTIFACT_NAME=${GITHUB_REPOSITORY#$GITHUB_REPOSITORY_OWNER/}-rhel9-${PLATFORM#linux/}-unsigned
+          echo "ARTIFACT_NAME=${ARTIFACT_NAME}" >> $GITHUB_OUTPUT
+          echo "::group::Setup Info"
+          echo "::notice file=rhel-integration.yml,line={61},title=Artifact Name: ${ARTIFACT_NAME}"
+          echo "::endgroup::"
+
       # https://github.com/actions/download-artifact
       - uses: 'actions/download-artifact@v4'
         id: restore-rpm-packages
         with:
-          name: ${{ INPUTS.REPOSITORY }}-rhel9-${{ RUNNER.ARCH }}-unsigned
-          path: '${{ RUNNER.TEMP }}/.rpms'
+          name: ${{ STEPS.SETUP.OUTPUTS.ARTIFACT_NAME }}
+          path: '${{ GITHUB.WORKSPACE }}/.rpms'
 
-      - name: List directory ${{ RUNNER.TEMP }}/.rpms
+      - name: List directory ${{ GITHUB.WORKSPACE }}/.rpms
         id: list-rpm-packages
         shell: bash
         run: |
-          printf "Ubuntu mount-point: %s" "${{ RUNNER.TEMP }}/.rpms"
-          ls -la ${{ RUNNER.TEMP }}/.rpms
-          ls -lan ${{ RUNNER.TEMP }}/.rpms
+          printf "Ubuntu mount-point: %s" "${{ GITHUB.WORKSPACE }}/.rpms"
+          ls -la ${{ GITHUB.WORKSPACE }}/.rpms
+          ls -lan ${{ GITHUB.WORKSPACE }}/.rpms
 
       - uses: 'docker/login-action@v3'
         id: container-registry
@@ -87,12 +99,6 @@ jobs:
         if: ${{ INPUTS.PLATFORM != 'linux/amd64' }}
         with: { platforms: arm64 }
 
-      - shell: bash
-        id: setup
-        run: |
-          echo "RUNNER_GID=$(id -g)" >> $GITHUB_OUTPUT
-          echo "RUNNER_UID=$(id -u)" >> $GITHUB_OUTPUT
-
       - uses: 'docker/build-push-action@v6'
         id: build
         with:
@@ -104,6 +110,8 @@ jobs:
           labels: ${{ STEPS.METADATA.OUTPUTS.LABELS }}
           tags: ${{ STEPS.METADATA.OUTPUTS.TAGS }}
           build-args: |
+            # Setting the artifact path is required for local & remote compatibility.
+            ARTIFACT_PATH="/home/runner/work/android-cuttlefish/android-cuttlefish/.rpms"
             RUNNER_GID=${{ STEPS.SETUP.OUTPUTS.RUNNER_GID }}
             RUNNER_UID=${{ STEPS.SETUP.OUTPUTS.RUNNER_UID }}
             LINUX_IMAGE=${{ VARS.RHEL_LINUX_IMAGE }}

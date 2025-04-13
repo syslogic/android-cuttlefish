@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
 
 # It builds the RPM packages and then spins up a container with these preinstalled.
-# `scripts/install.sh` produces a bloated image, unless mounting `/root/.cache` directory
 REPO_DIR="$(realpath "$(dirname "$0")/../..")"
-cd "${REPO_DIR}/docker/rpm-builder-orchestration" || exit
+cd "${REPO_DIR}/docker/rhel-orchestration" || exit
 PACKAGES="${REPO_DIR}/tools/rpmbuild/RPMS/x86_64"
 PLATFORM="linux/amd64"
 
