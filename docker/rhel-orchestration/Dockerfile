@@ -6,6 +6,8 @@ LABEL version="1.0.2"
 LABEL repository="https://github.com/google/android-cuttlefish"
 LABEL maintainer="Martin Zeitler"
 SHELL [ "/bin/bash", "-c" ]
+WORKDIR "/root"
+USER "root"
 
 # Arguments
 ARG RUNNER_GID="118"
@@ -38,8 +40,6 @@ RUN [ "dnf", "clean", "all" ]
 FROM base_image AS orchestration
 ARG ARTIFACT_PATH=./.rpms
 
-# Required to keep the container running.
-ENTRYPOINT [ "/home/runner/services.sh" ]
 
 # Expose Operator Port (HTTP:1080, HTTPS:1443)
 EXPOSE 1080 1443
@@ -58,17 +58,15 @@ RUN [ "mkdir", "/home/runner/.rpms" ]
 COPY [ "${ARTIFACT_PATH}/cuttlefish-orchestration-*", "/home/runner/.rpms" ]
 COPY [ "${ARTIFACT_PATH}/cuttlefish-base-*", "/home/runner/.rpms" ]
 
-# Run commands as user `runner`, who is the owner of the RPM packages.
-WORKDIR "/home/runner"
-USER "runner"
-
 # Container scripts.
-COPY [ "./docker/rhel-orchestration/services.sh", "/home/runner/services.sh" ]
-RUN [ "chmod", "+x", "/home/runner/services.sh" ]
-
-COPY [ "./docker/rpm-builder/scripts/install_rpm.sh", "/home/runner/install_rpm.sh" ]
-RUN [ "chmod", "+x", "/home/runner/install_rpm.sh" ]
+COPY [ "./docker/rpm-builder/scripts/install_rpm.sh", "/root/install_rpm.sh" ]
+RUN [ "chmod", "+x", "/root/install_rpm.sh" ]
 
 # Install RPM.
-RUN [ "bash", "-c", "/home/runner/install_rpm.sh" ]
+RUN [ "/bin/bash", "-c", "/root/install_rpm.sh" ]
 RUN [ "dnf", "clean", "all" ]
+
+# Required to keep the container running.
+COPY [ "./docker/rhel-orchestration/services.sh", "/home/runner/services.sh" ]
+RUN [ "chmod", "+x", "/home/runner/services.sh" ]
+ENTRYPOINT [ "/home/runner/services.sh" ]

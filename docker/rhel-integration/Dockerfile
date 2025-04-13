@@ -6,7 +6,8 @@ LABEL version="1.0.2"
 LABEL repository="https://github.com/google/android-cuttlefish"
 LABEL maintainer="Martin Zeitler"
 SHELL [ "/bin/bash", "-c" ]
-
+WORKDIR "/root"
+USER "root"
 
 # Arguments
 ARG RUNNER_GID="118"
@@ -55,20 +56,20 @@ EXPOSE 15550-15560
 EXPOSE 6520-6620
 
 # Restore build artifacts.
-RUN [ "mkdir", "/home/runner/.rpms" ]
+RUN [ "mkdir", "/root/.rpms" ]
 RUN [ "touch", "/root/.dockerenv", "/home/runner/.dockerenv" ]
-COPY [ "${ARTIFACT_PATH}/cuttlefish-integration-*", "/home/runner/.rpms" ]
-COPY [ "${ARTIFACT_PATH}/cuttlefish-user-*", "/home/runner/.rpms/" ]
-COPY [ "${ARTIFACT_PATH}/cuttlefish-base-*", "/home/runner/.rpms/" ]
-
-# Run commands as user `runner`, who is the owner of the RPM packages.
-WORKDIR "/home/runner"
-USER "runner"
+COPY [ "${ARTIFACT_PATH}/cuttlefish-integration-*", "/root/.rpms" ]
+COPY [ "${ARTIFACT_PATH}/cuttlefish-user-*", "/root/.rpms/" ]
+COPY [ "${ARTIFACT_PATH}/cuttlefish-base-*", "/root/.rpms/" ]
 
 # Container scripts.
-COPY [ "./docker/rpm-builder/scripts/install_rpm.sh", "/home/runner/install_rpm.sh" ]
-RUN [ "chmod", "+x", "/home/runner/install_rpm.sh" ]
+COPY [ "./docker/rpm-builder/scripts/install_rpm.sh", "/root/install_rpm.sh" ]
+RUN [ "chmod", "+x", "/root/install_rpm.sh" ]
 
 # Install RPM.
-RUN [ "bash", "-c", "/home/runner/install_rpm.sh" ]
+RUN [ "/bin/bash", "-c", "/root/install_rpm.sh" ]
 RUN [ "dnf", "clean", "all" ]
+
+# Run commands as user `runner`.
+WORKDIR "/home/runner"
+USER "runner"

@@ -4,8 +4,8 @@
 [ ! -f "${HOME}/.dockerenv" ] && echo ".dockerenv not present, exiting now." && exit 1
 cd "${HOME}/.rpms" || echo "${HOME}/.rpms not found, exiting now." && exit 1
 
-PACKAGES=""
-for FILE in ./*.rpm; do
+PACKAGES="nano"
+for FILE in ${HOME}/.rpms; do
     PACKAGES="${PACKAGES} $FILE"
 done
 echo "Packages to install: ${PACKAGES}"

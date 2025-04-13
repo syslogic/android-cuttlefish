@@ -20,6 +20,5 @@ docker buildx create --append --file docker/rhel-integration/Dockerfile
 docker buildx create --append --name android-cuttlefish rhel-integration
 docker buildx create --append --tag android-cuttlefish/rhel-integration:latest
 docker buildx create --append --tag android-cuttlefish/rhel-integration:1.4.0
-docker buildx create --append --build-arg ARTIFACT_PATH="./.rpms"
 docker buildx create --append --platform $PLATFORM
 docker buildx build

@@ -59,7 +59,7 @@ ENV RPM_SIGN_PASSPHRASE=""
 ENTRYPOINT [ "/bin/bash", "-c", "/home/runner/build.sh", "${REPO_USER}", "${REPO_NAME}", "${REPO_BRANCH}" ]
 
 # Build dependencies.
-RUN [ "dnf", "-y", "install", "git", "cmake", "gcc-c++", "rpm-build", "golang-bin", "expect", "vim-common", "ncurses-compat-libs", "curl-devel", "wayland-devel", "libzip-devel", "protobuf-devel", "protobuf-compiler", "ca-certificates" ]
+RUN [ "dnf", "-y", "install", "git", "cmake", "gcc-c++", "rpm-build", "golang-bin", "expect", "vim-common", "ncurses-compat-libs", "curl-devel", "wayland-devel", "libaom-devel", "opus-devel", "libzip-devel", "libzstd-devel", "protobuf-devel", "protobuf-compiler" ]
 RUN [ "dnf", "-y", "upgrade" ]
 RUN [ "dnf", "clean", "all" ]
 
@@ -76,13 +76,15 @@ COPY [ "./docker/rpm-builder/scripts/clone.sh", "/home/runner/clone.sh" ]
 COPY [ "./docker/rpm-builder/scripts/sign_rpm.sh", "/home/runner/sign_rpm.sh" ]
 COPY [ "./docker/rpm-builder/scripts/sign_rpm.exp", "/usr/local/bin/sign_rpm.exp" ]
 COPY [ "./docker/rpm-builder/scripts/install_rpm.sh", "/home/runner/install_rpm.sh" ]
+COPY [ "./docker/rpm-builder/scripts/patch_zlib.sh", "/home/runner/patch_zlib.sh" ]
 COPY [ "./docker/rpm-builder/build_rpm_spec.sh", "/home/runner/build_rpm_spec.sh" ]
+
 
 RUN [ "echo", "export", "GOPATH=/home/runner/go", ">>", "/home/runner/.bash_profile" ]
 RUN [ "echo", "export", "PATH=$PATH:/home/runner/go/bin", ">>", "/home/runner/.bash_profile" ]
 RUN [ "echo", "export", "BUILDX_GIT_LABELS=1", ">>", "/home/runner/.bash_profile" ]
 
-RUN [ "chmod", "+x", "/home/runner/build_rpm_spec.sh", "/home/runner/install_rpm.sh" ]
+RUN [ "chmod", "+x", "/home/runner/install_rpm.sh", "/home/runner/patch_zlib.sh", "/home/runner/build_rpm_spec.sh" ]
 RUN [ "chmod", "+x", "/home/runner/sign_rpm.sh", "/usr/local/bin/sign_rpm.exp" ]
 RUN [ "chmod", "+x", "/home/runner/build.sh", "/home/runner/clone.sh" ]
 RUN [ "chown", "-R", "runner:docker", "/home/runner" ]

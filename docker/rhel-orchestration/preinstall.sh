@@ -20,6 +20,5 @@ docker buildx create --append --file docker/rhel-orchestration/Dockerfile
 docker buildx create --append --name android-cuttlefish rhel-orchestration
 docker buildx create --append --tag android-cuttlefish/rhel-orchestration:latest
 docker buildx create --append --tag android-cuttlefish/rhel-orchestration:1.4.0
-docker buildx create --append --build-arg ARTIFACT_PATH="./.rpms"
 docker buildx create --append --platform $PLATFORM
 docker buildx build
