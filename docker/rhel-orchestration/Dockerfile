@@ -15,13 +15,6 @@ ARG RUNNER_UID="1001"
 ENV GID="${RUNNER_GID}"
 ENV UID="${RUNNER_UID}"
 
-# Adding the user provides the home directory.
-RUN groupadd -f -g ${GID} docker
-RUN useradd -g ${GID} -u ${UID} -s /bin/bash runner
-
-# Don't ask for the `sudo` password.
-RUN [ "echo", "%docker", "ALL=(ALL)", "NOPASSWD:", "ALL", ">", "/etc/sudoers.d/docker.conf" ]
-
 # The EPEL repository installs `dnf-core-plugin` (`config-manager` and `builddeps`) and provides `ncurses-compat-libs`.
 # Configuring further package repositories: / https://wiki.rockylinux.org/rocky/repo/#extra-repositories
 RUN [ "dnf", "-y", "install", "sudo", "nano", "wget", "https://dl.fedoraproject.org/pub/epel/epel-release-latest-9.noarch.rpm"]
@@ -30,16 +23,19 @@ RUN [ "dnf", "config-manager", "--set-enabled", "crb" ]
 RUN [ "dnf", "-y", "upgrade" ]
 RUN [ "dnf", "clean", "all" ]
 
-# Import Google RPM repository public key.
-# https://www.google.com/linuxrepositories/
-# RUN [ "wget", "https://dl.google.com/linux/linux_signing_key.pub" ]
-# RUN [ "rpm", "--import", "linux_signing_key.pub" ]
+# Adding group `docker`.
+RUN groupadd -f -g ${GID} docker
 
+# Adding group `docker` as sudoers drop-in config file ...
+# `sudo` must be installed and the filename must not contain a dot.
+RUN echo '%docker ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/docker
+
+# Adding user `runner` provides the home directory.
+RUN useradd -g ${GID} -u ${UID} -s /bin/bash runner
 
 # Host Orchestration
 FROM base_image AS orchestration
 ARG ARTIFACT_PATH=./.rpms
-
 
 # Expose Operator Port (HTTP:1080, HTTPS:1443)
 EXPOSE 1080 1443

@@ -18,13 +18,6 @@ ARG RUNNER_UID="1001"
 ENV GID="${RUNNER_GID}"
 ENV UID="${RUNNER_UID}"
 
-# Adding the user provides the home directory.
-RUN groupadd -f -g ${GID} docker
-RUN useradd -g ${GID} -u ${UID} -s /bin/bash runner
-
-# Don't ask for the `sudo` password.
-RUN [ "echo", "%docker", "ALL=(ALL)", "NOPASSWD:", "ALL", ">", "/etc/sudoers.d/docker.conf" ]
-
 # The EPEL repository installs `dnf-core-plugin` (`config-manager` and `builddeps`) and provides `ncurses-compat-libs`.
 # Configuring further package repositories: / https://wiki.rockylinux.org/rocky/repo/#extra-repositories
 RUN [ "dnf", "-y", "install", "sudo", "nano", "wget", "https://dl.fedoraproject.org/pub/epel/epel-release-latest-9.noarch.rpm"]
@@ -33,10 +26,15 @@ RUN [ "dnf", "config-manager", "--set-enabled", "crb" ]
 RUN [ "dnf", "-y", "upgrade" ]
 RUN [ "dnf", "clean", "all" ]
 
-# Import Google RPM repository public key.
-# https://www.google.com/linuxrepositories/
-# RUN [ "wget", "https://dl.google.com/linux/linux_signing_key.pub" ]
-# RUN [ "rpm", "--import", "linux_signing_key.pub" ]
+# Adding group `docker`.
+RUN groupadd -f -g ${GID} docker
+
+# Adding group `docker` as sudoers drop-in config file ...
+# `sudo` must be installed and the filename must not contain a dot.
+RUN echo '%docker ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/docker
+
+# Adding user `runner` provides the home directory.
+RUN useradd -g ${GID} -u ${UID} -s /bin/bash runner
 
 # https://docs.docker.com/reference/dockerfile/#notes-about-specifying-volumes
 # The host directory is declared at container run-time, with `--volume`, eg.
@@ -78,7 +76,6 @@ COPY [ "./docker/rpm-builder/scripts/sign_rpm.exp", "/usr/local/bin/sign_rpm.exp
 COPY [ "./docker/rpm-builder/scripts/install_rpm.sh", "/home/runner/install_rpm.sh" ]
 COPY [ "./docker/rpm-builder/scripts/patch_zlib.sh", "/home/runner/patch_zlib.sh" ]
 COPY [ "./docker/rpm-builder/build_rpm_spec.sh", "/home/runner/build_rpm_spec.sh" ]
-
 
 RUN [ "echo", "export", "GOPATH=/home/runner/go", ">>", "/home/runner/.bash_profile" ]
 RUN [ "echo", "export", "PATH=$PATH:/home/runner/go/bin", ">>", "/home/runner/.bash_profile" ]
