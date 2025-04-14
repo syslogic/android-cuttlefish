@@ -1,4 +1,5 @@
 name: Reusable Docker Container Run
+description: It mounts RUNNER.TEMP, because the mount is supposed to be outside the Docker context.
 
 on:
   workflow_call:
@@ -107,7 +108,7 @@ jobs:
       # https://docs.docker.com/reference/cli/docker/container/run/
       # https://docs.docker.com/reference/cli/docker/container/cp/
       # --entrypoint ${{ INPUTS.ENTRY-POINT }} cannot be changed with GitHub docker.
-      - name: Run image ${{ INPUTS.REGISTRY }}/${{ INPUTS.USERNAME }}/${{ INPUTS.IMAGE }} with source https://github.com/${{ INPUTS.USERNAME }}/${{ INPUTS.REPOSITORY }}.git#${{ INPUTS.BRANCH }}
+      - name: 'Run image ${{ INPUTS.REGISTRY }}/${{ INPUTS.USERNAME }}/${{ INPUTS.IMAGE }} with source branch: https://github.com/${{ INPUTS.USERNAME }}/${{ INPUTS.REPOSITORY }}.git#${{ INPUTS.BRANCH }}'
         id: build-rpm-packages
         shell: bash
         env:
