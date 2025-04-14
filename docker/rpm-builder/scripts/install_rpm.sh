@@ -5,6 +5,6 @@
 [ ! -d "/root/.rpms" ] && echo "/root/.rpms not found, exiting now." && exit 1
 cd "/root/.rpms" || exit 1
 
-for package in ./cuttlefish-$1-*.rpm; do
-  dnf -y --skip-broken install "${package}"
+for package in ./cuttlefish-*.rpm; do
+  dnf -y install --skip-broken "${package}"
 done

@@ -1,5 +1,4 @@
 name: RHEL Integration
-description: It mounts GITHUB.WORKSPACE, because the packages must be within the Docker context.
 
 on:
   workflow_call:
@@ -46,6 +45,11 @@ jobs:
 
   create-image:
     runs-on: ${{ INPUTS.RUNNER }}
+    permissions:
+      contents: read
+      packages: write
+      attestations: write
+      id-token: write
     env:
       DOCKER_IMAGE: ${{ INPUTS.REGISTRY }}/${{ INPUTS.USERNAME }}/${{ INPUTS.IMAGE }}
     steps:

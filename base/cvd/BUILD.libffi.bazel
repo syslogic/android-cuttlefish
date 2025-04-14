@@ -23,7 +23,13 @@ SRCS_X86_64 = [
     "src/x86/unix64.S",
     "src/x86/win64.S",
 ]
-
+SRCS_ARM_64 = [
+    "src/aarch64/ffi.c",
+    "src/aarch64/ffitarget.h",
+    "src/aarch64/internal.h",
+    "src/aarch64/sysv.S",
+    "src/aarch64/win64_armasm.S",
+]
 COPTS_X86_64 = [
     "-DHAVE_AS_X86_PCREL",
     "-DHAVE_AS_ASCII_PSEUDO_OP",
@@ -59,6 +65,7 @@ cc_library(
     name = "libffi",
     srcs = COMMON_SRCS + select({
         "@platforms//cpu:x86_64": SRCS_X86_64,
+        "@platforms//cpu:aarch64": SRCS_ARM_64,
         "//conditions:default": [],
     }),
     copts = [

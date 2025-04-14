@@ -1,5 +1,4 @@
 name: Reusable Docker Container Run
-description: It mounts RUNNER.TEMP, because the mount is supposed to be outside the Docker context.
 
 on:
   workflow_call:
@@ -60,8 +59,8 @@ on:
         required: false
         type: string
       runner_uid:
-        description: 'GitHub runner UIG'
-        default: 118
+        description: 'GitHub runner UID'
+        default: 1001
         required: false
         type: string
 jobs:

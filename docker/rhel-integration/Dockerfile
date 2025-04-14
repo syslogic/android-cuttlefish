@@ -12,9 +12,9 @@ USER "root"
 
 # The EPEL repository installs `dnf-core-plugin` (`config-manager` and `builddeps`) and provides `ncurses-compat-libs`.
 # Configuring further package repositories: / https://wiki.rockylinux.org/rocky/repo/#extra-repositories
-RUN [ "dnf", "-y", "install", "https://dl.fedoraproject.org/pub/epel/epel-release-latest-9.noarch.rpm"]
-RUN [ "rm", "/etc/yum.repos.d/epel-cisco-openh264.repo" ]
+RUN [ "dnf", "-y", "install", "epel-release" ]
 RUN [ "dnf", "config-manager", "--set-enabled", "crb" ]
+RUN [ "rm", "/etc/yum.repos.d/epel-cisco-openh264.repo" ]
 RUN [ "dnf", "-y", "upgrade" ]
 RUN [ "dnf", "clean", "all" ]
 
@@ -46,7 +46,7 @@ COPY [ "./docker/rpm-builder/scripts/install_rpm.sh", "/root/install_rpm.sh" ]
 RUN [ "chmod", "+x", "/root/install_rpm.sh" ]
 
 # Install RPM.
-RUN [ "/bin/bash", "-c", "/root/install_rpm.sh", "integration" ]
+RUN [ "/bin/bash", "-c", "/root/install_rpm.sh" ]
 RUN [ "dnf", "clean", "all" ]
 
 # Provide an interactive shell.

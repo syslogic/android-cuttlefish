@@ -1,5 +1,4 @@
 name: RHEL Orchestration
-description: It mounts GITHUB.WORKSPACE, because the packages must be within the Docker context.
 
 on:
   workflow_call:
@@ -46,6 +45,11 @@ jobs:
 
   create-image:
     runs-on: ${{ INPUTS.RUNNER }}
+    permissions:
+      contents: read
+      packages: write
+      attestations: write
+      id-token: write
     env:
       DOCKER_IMAGE: ${{ INPUTS.REGISTRY }}/${{ INPUTS.USERNAME }}/${{ INPUTS.IMAGE }}
       ARTIFACT_NAME: ${{ NEEDS.SETUP.OUTPUTS.ARTIFACT_NAME }}
@@ -112,8 +116,6 @@ jobs:
           labels: ${{ STEPS.METADATA.OUTPUTS.LABELS }}
           tags: ${{ STEPS.METADATA.OUTPUTS.TAGS }}
           build-args: |
-            RUNNER_GID=${{ STEPS.SETUP.OUTPUTS.RUNNER_GID }}
-            RUNNER_UID=${{ STEPS.SETUP.OUTPUTS.RUNNER_UID }}
             LINUX_IMAGE=${{ VARS.RHEL_LINUX_IMAGE }}
             GITHUB_USER=${{ GITHUB.REPOSITORY_OWNER }}
             GITHUB_REPO=${{ STEPS.SETUP.OUTPUTS.REPOSITORY_NAME }}
